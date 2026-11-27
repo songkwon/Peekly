@@ -1,12 +1,16 @@
 #!/bin/bash
 set -euo pipefail
 
-if [[ $# != 1 || "$(uname -s)" != Darwin || ! "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "Usage on macOS: $0 vMAJOR.MINOR.PATCH" >&2
+if [[ $# -lt 1 || $# -gt 2 || "$(uname -s)" != Darwin || ! "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Usage on macOS: $0 vMAJOR.MINOR.PATCH [CHECKSUMS_OUTPUT]" >&2
   exit 2
 fi
 
 tag="$1"
+checksums_output="${2:-}"
+if [[ -n "$checksums_output" && "$checksums_output" != /* ]]; then
+  checksums_output="$PWD/$checksums_output"
+fi
 repo=songkwon/Peekly
 script_dir="$(cd "$(dirname "$0")" && pwd)"
 stage="$(mktemp -d "${TMPDIR:-/tmp}/peekly-verify.XXXXXX")"
@@ -35,3 +39,7 @@ for arch in arm64 amd64; do
   test "$team" = "$expected_team"
   xcrun stapler validate "$app"
 done
+
+if [[ -n "$checksums_output" ]]; then
+  shasum -a 256 Peekly-macOS-arm64.zip Peekly-macOS-amd64.zip > "$checksums_output"
+fi
