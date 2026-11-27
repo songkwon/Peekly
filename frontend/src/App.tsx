@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Activity, ArrowDown, ArrowDownToLine, ArrowRight, ArrowUpFromLine, Cable, Check, ChevronRight, Circle, CircleHelp, Command, Copy, FilePlus2, GitCompareArrows, ListFilter, PenLine, Repeat2, Waypoints, Globe2, LockKeyhole, Moon, Network, PanelBottom, PanelRight, Radio, Search, Settings2, ShieldCheck, Square, Sun, Trash2, X, Zap } from 'lucide-react'
 import { api, native } from './api'
@@ -35,14 +35,16 @@ const formatTime = (date: string) => {
   return `${time.toLocaleTimeString('en-GB', { hour12: false })}.${String(time.getMilliseconds()).padStart(3, '0')}`
 }
 
-function Modal({ title, icon, onClose, children, notice, wide }: { title: string, icon: ReactNode, onClose: () => void, children: ReactNode, notice?: { message: string, error: boolean }, wide?: boolean }) {
+function Modal({ title, icon, onClose, children, notice, wide, focusTitle }: { title: string, icon: ReactNode, onClose: () => void, children: ReactNode, notice?: { message: string, error: boolean }, wide?: boolean, focusTitle?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null)
-  useEffect(() => {
+  const heading = useRef<HTMLHeadingElement>(null)
+  useLayoutEffect(() => {
     ref.current?.showModal()
-  }, [])
+    if (focusTitle) heading.current?.focus({ preventScroll: true })
+  }, [focusTitle])
   return <dialog ref={ref} className="modal peek-modal" onCancel={event => { event.preventDefault(); onClose() }} aria-labelledby="modal-title">
     <div className={`modal-box ${wide ? 'wide' : ''}`}>
-      <div className="modal-title"><span>{icon}</span><h2 id="modal-title">{title}</h2><button className="btn icon-button" onClick={onClose} aria-label="关闭"><X size={18} /></button></div>
+      <div className="modal-title"><span>{icon}</span><h2 id="modal-title" ref={heading} tabIndex={focusTitle ? -1 : undefined}>{title}</h2><button className="btn icon-button" onClick={onClose} aria-label="关闭"><X size={18} /></button></div>
       {children}
       {notice && <div className={`dialog-notice ${notice.error ? 'dialog-notice-error' : ''}`} role={notice.error ? 'alert' : 'status'}>{notice.message}</div>}
     </div>
@@ -430,10 +432,10 @@ export function App() {
         await api.restoreSystemProxy(); await refresh(); showToast('已恢复原系统代理')
       })}>恢复系统代理</button>}
       {desktopProblem && <span className="desktop-error" title={desktopProblem}>桌面连接异常</span>}
-      <div className="footer-end"><span>{visible.length === rows.length ? `${visible.length} 条请求` : `${visible.length} / ${rows.length} 条请求`}</span><span className="foot-divider"></span><span className={errorCount ? 'footer-error' : ''}>{errorCount} 错误</span><span className="foot-divider"></span><span className="mono">v0.2.1</span></div>
+      <div className="footer-end"><span>{visible.length === rows.length ? `${visible.length} 条请求` : `${visible.length} / ${rows.length} 条请求`}</span><span className="foot-divider"></span><span className={errorCount ? 'footer-error' : ''}>{errorCount} 错误</span><span className="foot-divider"></span><span className="mono">v0.2.2</span></div>
     </footer>
     {toast && !dialog && <div className={`toast-bar ${toast.error ? 'toast-error' : ''}`} role={toast.error ? 'alert' : 'status'}>{toast.error ? <CircleHelp size={17} /> : <Check size={17} />}{toast.message}</div>}
-    {dialog === 'capture-mode' && <Modal title="开始抓包" icon={<Circle size={18} />} notice={toast} onClose={() => setDialog(null)}>
+    {dialog === 'capture-mode' && <Modal focusTitle title="开始抓包" icon={<Circle size={18} />} notice={toast} onClose={() => setDialog(null)}>
       <div className="dialog-section capture-mode-choices">
         <p>Peekly 可以临时设置系统代理。浏览器等遵循系统设置的应用会自动接入，停止抓包时恢复原配置。</p>
         {platform === 'darwin' && <p>macOS 可能会请求管理员授权。</p>}

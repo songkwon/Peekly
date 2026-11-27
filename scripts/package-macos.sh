@@ -47,7 +47,7 @@ else
 fi
 test "$(lipo -archs "$binary")" = "$expected"
 cp build/darwin/Info.plist "$app/Contents/"
-cp build/darwin/icons.icns "$app/Contents/Resources/"
+cp build/darwin/AppIcon.icns build/darwin/Assets.car "$app/Contents/Resources/"
 codesign --force --sign - "$app"
 codesign --verify --deep --strict "$app"
 

@@ -15,6 +15,7 @@
 
 - macOS 运行 `./scripts/package-macos.sh`，也可指定 `arm64`、`amd64` 或 `universal`。
 - Windows 运行 `./scripts/package-windows.ps1 -Architecture amd64`，也可指定 `arm64`。
+- 修改 `build/darwin/AppIcon.icon` 后，在 macOS 26 或更新版本上使用 Xcode 26 或更新版本运行 `./scripts/compile-macos-icon.sh`，提交生成的 `AppIcon.icns` 和 `Assets.car`。
 
 ## 发布与 Homebrew
 
