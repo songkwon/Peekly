@@ -95,7 +95,7 @@ func (e *Engine) ExportHAR(ids []uint64, redact bool) ([]byte, error) {
 		entries = append(entries, entry)
 	}
 	return json.MarshalIndent(map[string]any{"log": map[string]any{
-		"version": "1.2", "creator": map[string]string{"name": "Peekly", "version": "0.2.2"}, "entries": entries,
+		"version": "1.2", "creator": map[string]string{"name": "Peekly", "version": "0.3.0"}, "entries": entries,
 	}}, "", "  ")
 }
 
