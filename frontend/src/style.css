@@ -305,7 +305,7 @@ td { height: 24px; border-bottom: 1px solid #eeeeee; }
 [data-appearance="dark"] .fixed-source:not(.chosen) em { background: var(--dark-action); }
 [data-appearance="dark"] .btn.capture-button { background: #b84624; border-color: #c95b39; color: #ffffff; }
 [data-appearance="dark"] .btn.capture-button:hover:not(:disabled) { background: #9e3519; }
-[data-appearance="dark"] :is(.search-field, .btn.subtle-button, .btn.small-button, .text-input, .summary-strip .curl-button) { background: #161616; border-color: var(--line-strong); color: var(--ink); }
+[data-appearance="dark"] :is(.search-field, .btn.subtle-button, .btn.small-button, .text-input, .summary-strip .curl-button) { background-color: #161616; border-color: var(--line-strong); color: var(--ink); }
 [data-appearance="dark"] :is(.btn.subtle-button, .btn.small-button, .summary-strip .curl-button):hover:not(:disabled) { background: var(--dark-action); }
 [data-appearance="dark"] thead th, [data-appearance="dark"] :is(.summary-strip, .payload-toolbar) { background: var(--dark-raised); color: #d3d3d3; }
 [data-appearance="dark"] th:not(:last-child)::after { background: #3a3a3a; }
@@ -442,7 +442,7 @@ td { height: 24px; border-bottom: 1px solid #eeeeee; }
 }
 
 .field-line :is(input, select).text-input { min-height: 32px; height: 32px; }
-:root :is(select.text-input, select.preview-format) {
+:is(select.text-input, select.preview-format) {
   appearance: none;
   padding-right: 23px;
   line-height: 1.25;
