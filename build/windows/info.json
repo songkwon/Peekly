@@ -1,12 +1,12 @@
 {
 	"fixed": {
-		"file_version": "0.2.2",
-		"product_version": "0.2.2"
+		"file_version": "0.3.0",
+		"product_version": "0.3.0"
 	},
 	"info": {
 		"0409": {
-			"FileVersion": "0.2.2",
-			"ProductVersion": "0.2.2",
+			"FileVersion": "0.3.0",
+			"ProductVersion": "0.3.0",
 			"CompanyName": "Peekly",
 			"FileDescription": "Peekly HTTP debugging proxy",
 			"LegalCopyright": "© 2026 Peekly",
