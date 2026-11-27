@@ -200,7 +200,7 @@ func main() {
 		return true
 	}
 	app := application.New(application.Options{
-		Name: "Peekly", Description: "Peekly HTTP debugging proxy", Icon: icon,
+		Name: "Peekly", Description: "Peekly HTTP debugging proxy", Icon: applicationIcon(),
 		Services:   []application.Service{application.NewService(desktop)},
 		Assets:     application.AssetOptions{Handler: application.AssetFileServerFS(assets)},
 		Mac:        application.MacOptions{ApplicationShouldTerminateAfterLastWindowClosed: true},
@@ -244,4 +244,18 @@ func main() {
 	if err := app.Run(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func applicationIcon() []byte {
+	if runtime.GOOS == "darwin" {
+		executable, err := os.Executable()
+		if err == nil {
+			catalog := filepath.Join(filepath.Dir(executable), "..", "Resources", "Assets.car")
+			if _, err := os.Stat(catalog); err == nil {
+				// Let macOS use the bundle icon for the Dock and appearance variants.
+				return nil
+			}
+		}
+	}
+	return icon
 }

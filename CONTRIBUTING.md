@@ -11,7 +11,7 @@
 
 ## 从源码构建
 
-需要 Go 1.26.10 和 Node.js 24。macOS 使用 Xcode 命令行工具，Windows 使用 Microsoft Edge WebView2 Runtime。
+需要 Go 1.26.10 和 Node.js 24。macOS 打包使用 Xcode 26 或更新版本编译应用图标，Windows 使用 Microsoft Edge WebView2 Runtime。
 
 - macOS 运行 `./scripts/package-macos.sh`，也可指定 `arm64`、`amd64` 或 `universal`。
 - Windows 运行 `./scripts/package-windows.ps1 -Architecture amd64`，也可指定 `arm64`。

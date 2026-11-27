@@ -7,6 +7,10 @@ if [[ "$(uname -s)" != Darwin ]]; then
 fi
 
 cd "$(dirname "$0")/.."
+if ! xcrun --find actool >/dev/null 2>&1; then
+  echo 'Select Xcode 26 or later to compile the macOS app icon.' >&2
+  exit 2
+fi
 arch="${1:-$(go env GOARCH)}"
 case "$arch" in
   arm64) expected=arm64 ;;
@@ -20,6 +24,12 @@ stage="$(mktemp -d "${TMPDIR:-/tmp}/peekly-package.XXXXXX")"
 trap 'rm -rf "$stage"' EXIT
 app="$stage/Peekly.app"
 mkdir -p "$out" "$app/Contents/MacOS" "$app/Contents/Resources"
+xcrun actool build/darwin/AppIcon.icon \
+  --compile "$app/Contents/Resources" --platform macosx --target-device mac \
+  --minimum-deployment-target 12.0 --app-icon AppIcon \
+  --output-partial-info-plist "$stage/icon.plist" --output-format human-readable-text
+test -s "$app/Contents/Resources/AppIcon.icns"
+test -s "$app/Contents/Resources/Assets.car"
 
 if [[ "${PEEKLY_SKIP_FRONTEND:-0}" != 1 ]]; then
   npm --prefix frontend ci
@@ -47,7 +57,6 @@ else
 fi
 test "$(lipo -archs "$binary")" = "$expected"
 cp build/darwin/Info.plist "$app/Contents/"
-cp build/darwin/icons.icns "$app/Contents/Resources/"
 codesign --force --sign - "$app"
 codesign --verify --deep --strict "$app"
 
