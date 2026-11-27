@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -63,6 +64,17 @@ func TestMobileSetupAndHTTPRewrite(t *testing.T) {
 		t.Fatalf("script metadata: %#v, %s", detail.Row, detail.ScriptError)
 	}
 	t.Logf("loopback client: %#v", detail.Client)
+	label := detail.Client.Name
+	if label == "" {
+		label = detail.Client.Address
+		if detail.Client.PID != 0 {
+			label = "PID " + strconv.Itoa(detail.Client.PID)
+		}
+	}
+	ids, err := engine.Matches([]Filter{{Field: "client", Op: "is", Value: label}}, false)
+	if err != nil || len(ids) != 1 || ids[0] != detail.ID {
+		t.Fatalf("exact client filter did not match: %v, %v", ids, err)
+	}
 	rules[0].Value = `function onRequest(request) { for (;;) {} }`
 	if err := engine.SetTrafficRules(rules); err != nil {
 		t.Fatal(err)

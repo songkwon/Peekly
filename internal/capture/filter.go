@@ -80,10 +80,16 @@ func filterValue(d Detail, field string) string {
 	case "host":
 		return d.Host
 	case "client":
-		if d.Client != nil {
-			return strings.TrimSpace(d.Client.Name + " " + d.Client.Address)
+		if d.Client == nil {
+			return d.Source
 		}
-		return d.Source
+		if d.Client.Name != "" {
+			return d.Client.Name
+		}
+		if d.Client.PID != 0 {
+			return "PID " + strconv.Itoa(d.Client.PID)
+		}
+		return d.Client.Address
 	case "method":
 		return d.Method
 	case "status":
