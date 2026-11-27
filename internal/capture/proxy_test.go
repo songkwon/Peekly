@@ -150,8 +150,8 @@ func TestHTTPSPassThroughAndDomainScopedDecryption(t *testing.T) {
 	if e.authorityFor("example.com") != nil || e.authorityFor("a.example.com") == nil {
 		t.Fatal("wildcard applies outside subdomains")
 	}
-	if _, err := e.SetRules([]string{"*"}); err == nil {
-		t.Fatal("global decryption accepted")
+	if _, err := e.SetRules([]string{"*"}); err != nil || e.authorityFor("another.test") == nil {
+		t.Fatal("global decryption was not enabled", err)
 	}
 	via := clientFor(t, e, roots)
 	response, err = via.Get(upstream.URL + "/decoded?q=1")

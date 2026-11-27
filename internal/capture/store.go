@@ -13,6 +13,7 @@ const (
 )
 
 type Row struct {
+	Client      *Client   `json:"client,omitempty"`
 	FrameCount  int       `json:"frameCount,omitempty"`
 	ID          uint64    `json:"id"`
 	Started     time.Time `json:"started"`
@@ -33,6 +34,7 @@ type Row struct {
 }
 
 type Detail struct {
+	ScriptError      string      `json:"scriptError,omitempty"`
 	ResponseTrailers http.Header `json:"responseTrailers,omitempty"`
 	Timing           *Timing     `json:"timing,omitempty"`
 	Frames           []Frame     `json:"frames,omitempty"`

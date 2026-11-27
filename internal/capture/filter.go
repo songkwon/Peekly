@@ -79,6 +79,17 @@ func filterValue(d Detail, field string) string {
 		return d.URL
 	case "host":
 		return d.Host
+	case "client":
+		if d.Client == nil {
+			return d.Source
+		}
+		if d.Client.Name != "" {
+			return d.Client.Name
+		}
+		if d.Client.PID != 0 {
+			return "PID " + strconv.Itoa(d.Client.PID)
+		}
+		return d.Client.Address
 	case "method":
 		return d.Method
 	case "status":

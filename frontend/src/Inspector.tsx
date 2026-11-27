@@ -126,7 +126,7 @@ function Payload({ side, row, detail, copy, saveBody }: { side: Side, row: Row, 
     {view === 'headers' && <div className="payload-scroll"><KeyValueList pairs={pairs} empty={detail ? '无标头' : '读取标头…'} /></div>}
     {view === 'query' && <div className="payload-scroll"><KeyValueList pairs={query} empty="无查询参数" /></div>}
     {view === 'cookies' && <div className="payload-scroll"><KeyValueList pairs={cookies} empty="无 Cookies" /></div>}
-    {view === 'frames' && <div className="payload-scroll"><FramesPreview frames={detail?.frames ?? []} count={row.frameCount ?? 0} /></div>}
+    {view === 'frames' && <div className="payload-scroll"><FramesPreview frames={detail?.frames ?? []} count={row.frameCount ?? 0} copy={copy} /></div>}
     {view === 'trailers' && <div className="payload-scroll"><KeyValueList pairs={Object.entries(detail?.responseTrailers ?? {}).flatMap(([name, values]) => values.map(value => [name, value] as [string, string]))} empty="无尾标" /></div>}
     {view === 'timing' && <div className="payload-scroll"><TimingDetails detail={detail} /></div>}
     {view === 'body' && <>
@@ -178,6 +178,7 @@ export function Inspector({ row, detail, dock, copy, tools, saveBody }: { row?: 
         title={detail?.requestTruncated ? '请求体已截断' : '复制为 cURL（POSIX Shell）'} onClick={() => { if (detail) copy(curlCommand(row, detail)) }}>cURL</button>
     </div>
     {tools}
+    {detail?.scriptError && <div className="request-error" role="status">脚本错误 · {detail.scriptError}</div>}
     {row.error && <div className="request-error" role="status">{row.error}</div>}
     {dock === 'right' && <div className="inspector-tabs" aria-label="详情视图">
       {([['request', '请求'], ['response', '响应']] as const).map(([key, label]) =>

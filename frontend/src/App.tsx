@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Activity, ArrowDown, ArrowDownToLine, ArrowRight, ArrowUpFromLine, Cable, Check, ChevronRight, Circle, CircleHelp, Command, Copy, FilePlus2, GitCompareArrows, ListFilter, PenLine, Repeat2, Waypoints, Globe2, LockKeyhole, Moon, Network, PanelBottom, PanelRight, Radio, Search, Settings2, ShieldCheck, Square, Sun, Trash2, X, Zap } from 'lucide-react'
+import { Activity, ArrowDown, ArrowDownToLine, ArrowRight, ArrowUpFromLine, Cable, Check, ChevronRight, Circle, CircleHelp, Command, Copy, FilePlus2, GitCompareArrows, ListFilter, PenLine, Repeat2, Waypoints, Globe2, LockKeyhole, Moon, Network, PanelBottom, PanelRight, Columns2, Radio, Search, Settings2, ShieldCheck, Square, Sun, Trash2, X, Zap } from 'lucide-react'
 import { api, native } from './api'
 import type { BreakpointAction, Condition, Detail, NetworkOptions, RequestInput, Row, Rule } from './api'
 import { ConnectionGuide } from './ConnectionGuide'
+import { SplitPane, clientLabel } from './SplitPane'
 import { Inspector, Status, formatSize, methodTone } from './Inspector'
 import { BreakpointPanel, ComposePanel, DiffPanel, FilterPanel, NetworkPanel, RulesPanel } from './Tools'
 
 type Filter = 'all' | 'HTTP' | 'HTTPS' | 'WebSocket' | 'json' | 'errors'
-type SortKey = 'id' | 'method' | 'path' | 'host' | 'status' | 'contentType' | 'started' | 'duration' | 'size'
+type SortKey = 'id' | 'method' | 'path' | 'host' | 'client' | 'status' | 'contentType' | 'started' | 'duration' | 'size'
 type Dock = 'right' | 'bottom'
 type Appearance = 'light' | 'dark' | 'system'
 type CaptureMode = 'automatic' | 'manual'
@@ -18,7 +19,7 @@ const filters: { id: Filter, label: string }[] = [
   { id: 'WebSocket', label: 'WebSocket' }, { id: 'json', label: 'JSON' }, { id: 'errors', label: '错误' },
 ]
 const columns: { id: SortKey, label: string }[] = [
-  { id: 'id', label: '#' }, { id: 'method', label: '方法' }, { id: 'path', label: '路径' }, { id: 'host', label: '主机' },
+  { id: 'id', label: '#' }, { id: 'method', label: '方法' }, { id: 'path', label: '路径' }, { id: 'host', label: '主机' }, { id: 'client', label: 'Client' },
   { id: 'status', label: '状态' }, { id: 'contentType', label: '类型' }, { id: 'started', label: '时间' },
   { id: 'duration', label: '耗时' }, { id: 'size', label: '响应大小' },
 ]
@@ -94,6 +95,8 @@ export function App() {
   const [query, setQuery] = useState('')
   const [filter, setFilter] = useState<Filter>('all')
   const [host, setHost] = useState('')
+  const [groupBy, setGroupBy] = useState<'domains' | 'apps'>('domains')
+  const [split, setSplit] = useState(false)
   const [selected, setSelected] = useState<number>()
   const [detail, setDetail] = useState<Detail | null>(null)
   const [toast, setToast] = useState<{ message: string, error: boolean }>()
@@ -178,9 +181,12 @@ export function App() {
 
   const counts = useMemo(() => {
     const hosts = new Map<string, number>()
-    for (const row of rows) hosts.set(row.host, (hosts.get(row.host) ?? 0) + 1)
+    for (const row of rows) {
+      const group = groupBy === 'apps' ? clientLabel(row) : row.host
+      hosts.set(group, (hosts.get(group) ?? 0) + 1)
+    }
     return [...hosts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-  }, [rows])
+  }, [rows, groupBy])
   const visible = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
     const result = rows.filter(row => {
@@ -189,19 +195,19 @@ export function App() {
         filter === 'json' ? row.contentType.includes('json') :
         filter === row.kind || (filter === 'HTTPS' && row.kind === 'Tunnel')
       )
-      const haystack = `${row.method} ${row.url} ${row.status} ${row.kind} ${row.contentType}`.toLowerCase()
+      const haystack = `${row.method} ${row.url} ${row.status} ${row.kind} ${row.contentType} ${clientLabel(row)} ${row.client?.address ?? ''}`.toLowerCase()
       const advancedMatch = !conditions.length || matches?.has(row.id)
-      return matchesFilter && advancedMatch && (!host || row.host === host) && terms.every(term => haystack.includes(term))
+      return matchesFilter && advancedMatch && (!host || (groupBy === 'apps' ? clientLabel(row) : row.host) === host) && terms.every(term => haystack.includes(term))
     })
     result.sort((a, b) => {
-      const left = a[sort.key]
-      const right = b[sort.key]
+      const left = sort.key === 'client' ? clientLabel(a) : a[sort.key]
+      const right = sort.key === 'client' ? clientLabel(b) : b[sort.key]
       const comparison = typeof left === 'number' && typeof right === 'number'
         ? left - right : String(left).localeCompare(String(right))
       return (sort.reverse ? -comparison : comparison) || b.id - a.id
     })
     return result
-  }, [rows, filter, host, query, sort, conditions, matches])
+  }, [rows, filter, host, groupBy, query, sort, conditions, matches])
   const activeRow = visible.find(row => row.id === selected) ?? visible[0]
   const activeID = activeRow?.id
   const activePending = activeRow?.pending
@@ -325,9 +331,10 @@ export function App() {
       <div className="toolbar-spacer" />
       <div className="titlebar-tools" style={{ '--wails-draggable': 'no-drag' } as React.CSSProperties}>
         <div className="dock-buttons" aria-label="详情面板位置">
-          <button className="btn icon-button" title="右侧详情" aria-label="右侧详情" aria-pressed={dock === 'right'} onClick={() => changeDock('right')}><PanelRight size={16} /></button>
-          <button className="btn icon-button" title="底部详情" aria-label="底部详情" aria-pressed={dock === 'bottom'} onClick={() => changeDock('bottom')}><PanelBottom size={16} /></button>
+          <button className="btn icon-button" title="右侧详情" aria-label="右侧详情" aria-pressed={!split && dock === 'right'} disabled={split} onClick={() => changeDock('right')}><PanelRight size={16} /></button>
+          <button className="btn icon-button" title="底部详情" aria-label="底部详情" aria-pressed={split || dock === 'bottom'} disabled={split} onClick={() => changeDock('bottom')}><PanelBottom size={16} /></button>
         </div>
+        <button className="btn icon-button" title="Split View" aria-label="Split View" aria-pressed={split} onClick={() => setSplit(!split)}><Columns2 size={16} /></button>
         <button className="btn icon-button" aria-label={dark ? '切换浅色' : '切换深色'} title={dark ? '切换浅色' : '切换深色'} onClick={() => setAppearance(dark ? 'light' : 'dark')}>{dark ? <Sun size={15} /> : <Moon size={15} />}</button>
         <button className="btn icon-button" title="代理设置" aria-label="代理设置" onClick={() => openDialog('connection')}><Settings2 size={16} /></button>
       </div>
@@ -340,9 +347,13 @@ export function App() {
           <button className={`source-button fixed-source ${!host ? 'chosen' : ''}`} onClick={() => setHost('')} aria-pressed={!host}>
             <Activity size={14} /><span>所有请求</span><em>{rows.length}</em>
           </button>
-          <div className="sidebar-label host-label"><span>主机</span><b className="mono">{counts.length}</b></div>
+          <div className="source-switch" aria-label="流量分组">
+            <button type="button" aria-pressed={groupBy === 'domains'} onClick={() => { setGroupBy('domains'); setHost('') }}>Domains</button>
+            <button type="button" aria-pressed={groupBy === 'apps'} onClick={() => { setGroupBy('apps'); setHost('') }}>Apps</button>
+            <b className="mono">{counts.length}</b>
+          </div>
           <div className="source-list">
-            {counts.length === 0 && <p className="no-hosts">等待新的主机连接</p>}
+            {counts.length === 0 && <p className="no-hosts">等待新的连接</p>}
             {counts.map(([name, count]) => <button key={name} title={name} aria-pressed={host === name}
               className={`source-button ${host === name ? 'chosen' : ''}`} onClick={() => setHost(host === name ? '' : name)}>
               {name === 'localhost' || name === '127.0.0.1' ? <Cable size={13} /> : <Globe2 size={13} />}
@@ -370,7 +381,8 @@ export function App() {
           </label>
         </div>
 
-        <div className={`panes dock-${dock}`}>
+        <div className={`traffic-layout ${split ? 'is-split' : ''}`}>
+        <div className={`panes dock-${split ? 'bottom' : dock}`}>
           <section className="request-list" aria-label="请求列表">
             <div className={`request-scroll ${visible.length ? '' : 'is-empty'}`} role="region" aria-label="流量表格">
               <table>
@@ -400,6 +412,7 @@ export function App() {
                     <strong className="mono">{row.path}</strong>
                   </button></td>
                   <td className="mono cell-host" title={row.host}>{row.host}</td>
+                  <td className="mono cell-client" title={[clientLabel(row), row.client?.address, row.client?.pid && `PID ${row.client.pid}`].filter(Boolean).join(' · ')}>{clientLabel(row)}</td>
                   <td className="cell-status">{row.breakpoint ? <button className="break-chip" onClick={event => { event.stopPropagation(); setSelected(row.id); clickedBreakpoint(row) }}>已暂停</button> : <Status row={row} />}</td>
                   <td className="mono cell-contentType" title={row.contentType}>{row.kind === 'Tunnel' ? '隧道' : row.kind === 'WebSocket' ? 'WS' : fileType(row.contentType)}</td>
                   <td className="mono cell-started">{formatTime(row.started)}</td>
@@ -415,7 +428,7 @@ export function App() {
               </div>}
             </div>
           </section>
-          <Inspector key={activeID ?? "empty"} row={activeRow} detail={activeDetail} dock={dock} copy={text => void copy(text)}
+          <Inspector key={activeID ?? "empty"} row={activeRow} detail={activeDetail} dock={split ? 'bottom' : dock} copy={text => void copy(text)}
             saveBody={activeDetail ? request => void perform(async () => { if (await api.saveBody(activeDetail.id, request)) showToast('正文已保存') }) : undefined}
             tools={activeRow && <div className="inspector-tools">
               <button className="btn tool-button" disabled={!activeDetail || activeRow.pending || activeRow.method === 'CONNECT' || !native}
@@ -427,6 +440,8 @@ export function App() {
               }}><GitCompareArrows size={13} /> 对比</button>
               {activeRow.breakpoint && <button className="btn tool-button on" onClick={() => clickedBreakpoint(activeRow)}>断点操作</button>}
             </div>} />
+        </div>
+        {split && <SplitPane rows={rows} copy={text => void copy(text)} compare={value => { setComparison(value); openDialog('compare') }} />}
         </div>
       </main>
     </div>
@@ -479,7 +494,12 @@ export function App() {
         {fingerprint && <button className="command-block fingerprint mono" onClick={() => void copy(fingerprint)}><code>{fingerprint}</code><Copy size={15} /></button>}
       </div>
       <div className="dialog-section"><label className="field-label" htmlFor="tls-hosts">需要解密的域名</label>
-        <p>一行一个域名、IP 或子域名通配符。设置立即用于新连接，每次启动需重新开启。</p>
+        <label className="inline-label all-domains"><input type="checkbox" checked={ruleDraft.split('\n').some(line => line.trim() === '*')}
+          onChange={event => {
+            const domains = ruleDraft.split('\n').filter(line => line.trim() && line.trim() !== '*')
+            setRuleDraft((event.target.checked ? ['*', ...domains] : domains).join('\n'))
+          }} /> 解密所有域名</label>
+        <p>规则应用到新连接。关闭全域名解密后，可按域名、IP 或 *.example.com 选择。匹配主机的绕过规则仍走加密隧道。重启应用后需要重新启用。</p>
         <textarea data-modal-initial-focus className="textarea text-input mono tls-rules" id="tls-hosts" value={ruleDraft} placeholder={'api.example.com\n*.dev.example.com'} onChange={event => setRuleDraft(event.target.value)} />
       </div>
       <div className="modal-actions"><button className="btn subtle-button" onClick={() => setDialog(null)}>取消</button>
