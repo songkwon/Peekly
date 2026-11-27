@@ -46,3 +46,4 @@ shasum -a 256 Peekly-macOS-*.zip Peekly-windows-*.zip > SHA256SUMS.txt
 test "$(gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft)" = true
 gh release upload "$tag" --repo "$repo" --clobber Peekly-macOS-*.zip SHA256SUMS.txt
 gh release edit "$tag" --repo "$repo" --draft=false --latest
+"$script_dir/open-cask-pr.sh" "$tag"
