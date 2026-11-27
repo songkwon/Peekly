@@ -1,0 +1,18 @@
+.DS_Store
+/build-out/
+/frontend/dist/
+/frontend/node_modules/
+/wails_windows_*.syso
+
+# Local signing material and debug captures
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.p8
+*.keychain
+*.keychain-db
+*.har
+*.pem
+*.key

@@ -1,0 +1,149 @@
+name: Package Peekly
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    if: github.event_name != 'release'
+    name: ${{ matrix.platform }} / ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { platform: macOS, runner: macos-26, arch: arm64 }
+          - { platform: macOS, runner: macos-26-intel, arch: amd64 }
+          - { platform: windows, runner: windows-2025, arch: amd64 }
+          - { platform: windows, runner: windows-11-arm, arch: arm64 }
+    env:
+      GOFLAGS: -mod=readonly
+      TARGET_ARCH: ${{ matrix.arch }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7.1.0
+        with:
+          go-version: '1.26.10'
+          check-latest: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Read version from tag
+        if: github.ref_type == 'tag'
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          echo "PEEKLY_RELEASE_VERSION=${GITHUB_REF_NAME#v}" >> "$GITHUB_ENV"
+
+      - name: Build frontend and verify platform
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(go env GOARCH)" = "$TARGET_ARCH"
+          npm --prefix frontend ci
+          npm --prefix frontend run build
+          echo 'PEEKLY_SKIP_FRONTEND=1' >> "$GITHUB_ENV"
+
+      - name: Test and package macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '12.0'
+        run: |
+          set -euo pipefail
+          go test -race -ldflags=-extldflags=-mmacosx-version-min=12.0 ./...
+          ./scripts/package-macos.sh "$TARGET_ARCH"
+
+      - name: Test and package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $PSNativeCommandUseErrorActionPreference = $true
+          go test ./...
+          ./scripts/package-windows.ps1 -Architecture $env:TARGET_ARCH
+
+      - name: Upload package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Peekly-${{ matrix.platform }}-${{ matrix.arch }}
+          path: build-out/Peekly-${{ matrix.platform }}-${{ matrix.arch }}.zip
+          if-no-files-found: error
+
+  package_gate:
+    name: Package checks
+    if: always() && github.event_name != 'release'
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all four packages
+        env:
+          PACKAGE_RESULT: ${{ needs.package.result }}
+        run: test "$PACKAGE_RESULT" = success
+
+  prepare_release:
+    name: Prepare release draft
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: package_gate
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: Peekly-*
+          path: release-assets
+          merge-multiple: true
+      - name: Create release draft
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          relation="$(gh api "repos/$GITHUB_REPOSITORY/compare/$GITHUB_REF_NAME...$DEFAULT_BRANCH" --jq .status)"
+          case "$relation" in
+            identical|ahead) ;;
+            *) echo "::error::Release tags must point to commits on $DEFAULT_BRANCH."; exit 1 ;;
+          esac
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then exit 0; fi
+          cd release-assets
+          sha256sum Peekly-macOS-*.zip Peekly-windows-*.zip > SHA256SUMS.txt
+          gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --generate-notes \
+            Peekly-macOS-*.zip Peekly-windows-*.zip SHA256SUMS.txt
+
+  verify_release:
+    name: Verify published macOS packages
+    if: github.event_name == 'release' && !github.event.release.prerelease
+    runs-on: macos-26
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Verify release signatures, tickets and checksums
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: ./scripts/verify-release-macos.sh "$RELEASE_TAG"
