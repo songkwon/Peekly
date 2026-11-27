@@ -442,7 +442,7 @@ td { height: 24px; border-bottom: 1px solid #eeeeee; }
 }
 
 .field-line :is(input, select).text-input { min-height: 32px; height: 32px; }
-:is(select.text-input, select.preview-format) {
+:root :is(select.text-input, select.preview-format) {
   appearance: none;
   padding-right: 23px;
   line-height: 1.25;

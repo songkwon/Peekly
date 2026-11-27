@@ -57,7 +57,7 @@ export function ConnectionGuide({ address, host, running, platform, portDraft, s
               <p>{device === 'ios' ? '设置 → Wi-Fi → 当前网络 → 配置代理 → 手动。' :
                 device === 'simulator' ? '在模拟器 Safari 打开下方地址，确认能连接 Peekly。' :
                 '在 Android 的当前 Wi-Fi 网络编辑页面，把系统代理设为手动。'}</p>
-              {device !== 'simulator' && <button className="command-block mono" type="button" onClick={() => copy(`${device === 'emulator' && host === '127.0.0.1' ? '10.0.2.2' : host}:${listeningPort}`)}>
+              {device !== 'simulator' && (device === 'emulator' || host !== '127.0.0.1') && <button className="command-block mono" type="button" onClick={() => copy(`${device === 'emulator' && host === '127.0.0.1' ? '10.0.2.2' : host}:${listeningPort}`)}>
                 <code>{device === 'emulator' && host === '127.0.0.1' ? '10.0.2.2' : host}:{listeningPort}</code><Clipboard size={13} /></button>}
               <p>在设备浏览器打开测试页面。页面有连接状态和根证书下载入口。</p>
               <button className="command-block mono" type="button" onClick={() => copy('http://peekly.test/')}><code>http://peekly.test/</code><Clipboard size={13} /></button>

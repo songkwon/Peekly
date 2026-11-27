@@ -205,11 +205,25 @@ function compareLines(first: string, second: string) {
   for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--)
     lengths[i][j] = a[i] === b[j] ? lengths[i + 1][j + 1] + 1 : Math.max(lengths[i + 1][j], lengths[i][j + 1])
   const diff: { left?: string, right?: string, changed: boolean }[] = []
-  for (let i = 0, j = 0; i < a.length || j < b.length;) {
-    if (i < a.length && j < b.length && a[i] === b[j]) diff.push({ left: a[i++], right: b[j++], changed: false })
-    else if (j >= b.length || i < a.length && lengths[i + 1][j] >= lengths[i][j + 1]) diff.push({ left: a[i++], changed: true })
-    else diff.push({ right: b[j++], changed: true })
+  const removed: string[] = []
+  const added: string[] = []
+  function flushChanges() {
+    for (let i = 0; i < Math.max(removed.length, added.length); i++) {
+      diff.push({ left: removed[i], right: added[i], changed: true })
+    }
+    removed.length = added.length = 0
   }
+  for (let i = 0, j = 0; i < a.length || j < b.length;) {
+    if (i < a.length && j < b.length && a[i] === b[j]) {
+      flushChanges()
+      diff.push({ left: a[i++], right: b[j++], changed: false })
+    } else if (j >= b.length || i < a.length && lengths[i + 1][j] >= lengths[i][j + 1]) {
+      removed.push(a[i++])
+    } else {
+      added.push(b[j++])
+    }
+  }
+  flushChanges()
   return diff
 }
 
