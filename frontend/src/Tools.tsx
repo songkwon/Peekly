@@ -42,7 +42,7 @@ export function ComposePanel({ initial, pending, submit, close }: { initial: Det
       <label className="field-label" htmlFor="compose-url">请求地址</label>
       <div className="field-line"><select className="text-input mono" aria-label="HTTP 方法" value={method} onChange={event => setMethod(event.target.value)}>
         {Array.from(new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', method])).map(item => <option key={item}>{item}</option>)}
-      </select><input id="compose-url" autoFocus className="text-input mono stretch" type="url" required placeholder="https://api.example.test/v1/health" value={url} onChange={event => setURL(event.target.value)} /></div>
+      </select><input id="compose-url" data-modal-initial-focus className="text-input mono stretch" type="url" required placeholder="https://api.example.test/v1/health" value={url} onChange={event => setURL(event.target.value)} /></div>
       {initial?.requestTruncated && <p>已载入截断的请求正文，请按需补全。</p>}
       {initial?.requestBody && !body && <p>原始二进制正文可使用直接重发。编辑器仅接受文本。</p>}
       <label className="field-label" htmlFor="compose-headers">标头</label>

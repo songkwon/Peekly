@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import { Activity, ArrowDown, ArrowDownToLine, ArrowRight, ArrowUpFromLine, Cable, Check, ChevronRight, Circle, CircleHelp, Command, Copy, FilePlus2, GitCompareArrows, ListFilter, PenLine, Repeat2, Waypoints, Globe2, LockKeyhole, Moon, Network, PanelBottom, PanelRight, Radio, Search, Settings2, ShieldCheck, Square, Sun, Trash2, X, Zap } from 'lucide-react'
 import { api, native } from './api'
@@ -35,20 +35,26 @@ const formatTime = (date: string) => {
   return `${time.toLocaleTimeString('en-GB', { hour12: false })}.${String(time.getMilliseconds()).padStart(3, '0')}`
 }
 
-function Modal({ title, icon, onClose, children, notice, wide, focusTitle }: { title: string, icon: ReactNode, onClose: () => void, children: ReactNode, notice?: { message: string, error: boolean }, wide?: boolean, focusTitle?: boolean }) {
+function Modal({ title, icon, onClose, children, notice, wide }: { title: string, icon: ReactNode, onClose: () => void, children: ReactNode, notice?: { message: string, error: boolean }, wide?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
+  const titleId = useId()
   useLayoutEffect(() => {
-    ref.current?.showModal()
-    if (focusTitle) heading.current?.focus({ preventScroll: true })
-  }, [focusTitle])
-  return <dialog ref={ref} className="modal peek-modal" onCancel={event => { event.preventDefault(); onClose() }} aria-labelledby="modal-title">
+    const modal = ref.current
+    if (!modal) return
+    const initial = modal.querySelector<HTMLElement>('[data-modal-initial-focus]') ?? heading.current
+    initial?.setAttribute('autofocus', '')
+    modal.showModal()
+    if (document.activeElement !== initial) initial?.focus({ preventScroll: true })
+    return () => modal.close()
+  }, [])
+  return <dialog ref={ref} className="modal peek-modal" onCancel={event => { event.preventDefault(); onClose() }} aria-labelledby={titleId}>
     <div className={`modal-box ${wide ? 'wide' : ''}`}>
-      <div className="modal-title"><span>{icon}</span><h2 id="modal-title" ref={heading} tabIndex={focusTitle ? -1 : undefined}>{title}</h2><button className="btn icon-button" onClick={onClose} aria-label="关闭"><X size={18} /></button></div>
+      <div className="modal-title"><span>{icon}</span><h2 id={titleId} ref={heading} tabIndex={-1}>{title}</h2><button className="btn icon-button" onClick={onClose} aria-label="关闭"><X size={18} /></button></div>
       {children}
       {notice && <div className={`dialog-notice ${notice.error ? 'dialog-notice-error' : ''}`} role={notice.error ? 'alert' : 'status'}>{notice.message}</div>}
     </div>
-    <form method="dialog" className="modal-backdrop" onSubmit={event => { event.preventDefault(); onClose() }}><button aria-label="关闭"></button></form>
+    <form method="dialog" className="modal-backdrop" aria-hidden="true" onSubmit={event => { event.preventDefault(); onClose() }}><button tabIndex={-1}></button></form>
   </dialog>
 }
 
@@ -435,7 +441,7 @@ export function App() {
       <div className="footer-end"><span>{visible.length === rows.length ? `${visible.length} 条请求` : `${visible.length} / ${rows.length} 条请求`}</span><span className="foot-divider"></span><span className={errorCount ? 'footer-error' : ''}>{errorCount} 错误</span><span className="foot-divider"></span><span className="mono">v0.2.2</span></div>
     </footer>
     {toast && !dialog && <div className={`toast-bar ${toast.error ? 'toast-error' : ''}`} role={toast.error ? 'alert' : 'status'}>{toast.error ? <CircleHelp size={17} /> : <Check size={17} />}{toast.message}</div>}
-    {dialog === 'capture-mode' && <Modal focusTitle title="开始抓包" icon={<Circle size={18} />} notice={toast} onClose={() => setDialog(null)}>
+    {dialog === 'capture-mode' && <Modal title="开始抓包" icon={<Circle size={18} />} notice={toast} onClose={() => setDialog(null)}>
       <div className="dialog-section capture-mode-choices">
         <p>Peekly 可以临时设置系统代理。浏览器等遵循系统设置的应用会自动接入，停止抓包时恢复原配置。</p>
         {platform === 'darwin' && <p>macOS 可能会请求管理员授权。</p>}
@@ -474,7 +480,7 @@ export function App() {
       </div>
       <div className="dialog-section"><label className="field-label" htmlFor="tls-hosts">需要解密的域名</label>
         <p>一行一个域名、IP 或子域名通配符。设置立即用于新连接，每次启动需重新开启。</p>
-        <textarea autoFocus className="textarea text-input mono tls-rules" id="tls-hosts" value={ruleDraft} placeholder={'api.example.com\n*.dev.example.com'} onChange={event => setRuleDraft(event.target.value)} />
+        <textarea data-modal-initial-focus className="textarea text-input mono tls-rules" id="tls-hosts" value={ruleDraft} placeholder={'api.example.com\n*.dev.example.com'} onChange={event => setRuleDraft(event.target.value)} />
       </div>
       <div className="modal-actions"><button className="btn subtle-button" onClick={() => setDialog(null)}>取消</button>
         <button className="btn capture-button" disabled={busy || !native} onClick={() => void perform(async () => {
