@@ -79,6 +79,11 @@ func filterValue(d Detail, field string) string {
 		return d.URL
 	case "host":
 		return d.Host
+	case "client":
+		if d.Client != nil {
+			return strings.TrimSpace(d.Client.Name + " " + d.Client.Address)
+		}
+		return d.Source
 	case "method":
 		return d.Method
 	case "status":

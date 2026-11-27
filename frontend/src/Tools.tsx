@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ArrowUp, ChevronDown, CirclePlus, Play, Trash2 } from 'lucide-react'
 import { readBytes } from './api'
 import type { BreakpointAction, Condition, Detail, Headers, NetworkOptions, RequestInput, Row, Rule } from './api'
@@ -54,11 +54,20 @@ export function ComposePanel({ initial, pending, submit, close }: { initial: Det
   </form>
 }
 
+const scriptExample = `function onRequest(request) {
+  request.headers["X-Peekly-Debug"] = ["1"];
+  return request;
+}
+
+function onResponse(response) {
+  return response;
+}`
+
 export const ruleKinds: Record<string, string> = {
   mock: '模拟响应', file: '本地文件映射', directory: '本地目录映射', redirect: '远程映射',
   'break-request': '请求断点', 'break-response': '响应断点', block: '阻止', allow: '允许列表', bypass: '绕过抓包',
   'request-set': '覆盖请求标头', 'request-add': '追加请求标头', 'request-remove': '删除请求标头',
-  'response-set': '覆盖响应标头', 'response-add': '追加响应标头', 'response-remove': '删除响应标头',
+  script: 'JavaScript 脚本', 'response-set': '覆盖响应标头', 'response-add': '追加响应标头', 'response-remove': '删除响应标头',
   delay: '模拟延迟', throttle: '响应限速', 'no-cache': '禁用缓存',
 }
 
@@ -68,9 +77,9 @@ export function RulesPanel({ initial, pending, submit, close }: { initial: Rule[
   function patch(index: number, value: Partial<Rule>) {
     setRules(rules.map((rule, i) => i === index ? { ...rule, ...value } : rule))
   }
-  function add() {
+  function add(kind: 'mock' | 'script') {
     setExpanded(rules.length)
-    setRules([...rules, { enabled: true, kind: 'mock', match: 'contains', pattern: '', name: '', value: '', number: 200 }])
+    setRules([...rules, { enabled: true, kind, match: 'contains', pattern: '', name: '', value: kind === 'script' ? scriptExample : '', number: 200 }])
   }
   return <div>
     <div className="dialog-section tool-fields">
@@ -92,7 +101,7 @@ export function RulesPanel({ initial, pending, submit, close }: { initial: Rule[
             <button className="btn icon-button" title="移除规则" aria-label="移除规则" onClick={() => { setRules(rules.filter((_, i) => i !== index)); setExpanded(-1) }}><Trash2 size={13} /></button>
           </div>
           {expanded === index && <div className="rule-edit">
-            <div className="field-line"><select className="text-input" aria-label="规则动作" value={rule.kind} onChange={event => patch(index, { kind: event.target.value, name: '', value: '', number: event.target.value === 'mock' ? 200 : 100 })}>
+            <div className="field-line"><select className="text-input" aria-label="规则动作" value={rule.kind} onChange={event => patch(index, { kind: event.target.value, name: '', value: event.target.value === 'script' ? scriptExample : '', number: event.target.value === 'mock' ? 200 : 100 })}>
               {Object.entries(ruleKinds).map(([key, title]) => <option key={key} value={key}>{title}</option>)}
             </select><select className="text-input" aria-label="URL 匹配方式" value={rule.match} onChange={event => patch(index, { match: event.target.value })}>
               <option value="contains">包含</option><option value="glob">通配符</option><option value="regex">正则</option>
@@ -101,19 +110,27 @@ export function RulesPanel({ initial, pending, submit, close }: { initial: Rule[
               <input className="text-input mono" type="number" value={rule.number} onChange={event => patch(index, { number: Number(event.target.value) })} /></label>}
             {(header || rule.kind === 'mock' || rule.kind === 'directory') && <input className="text-input mono" aria-label="标头名称、MIME 或路径前缀"
               placeholder={header ? '标头名称，如 X-Debug' : rule.kind === 'directory' ? 'URL 路径前缀，如 /assets' : 'Content-Type（可选）'} value={rule.name} onChange={event => patch(index, { name: event.target.value })} />}
+            {rule.kind === 'script' && <>
+              <label className="field-label">请求与响应脚本<textarea className="text-input mono tool-text medium" aria-label="JavaScript 脚本"
+                spellCheck={false} value={rule.value} onChange={event => patch(index, { value: event.target.value })} /></label>
+              <p>按 URL 匹配运行。onRequest 和 onResponse 接收包含 url、method、headers、body 与响应 status 的对象。标头值用字符串数组，无法读取的正文为 null。</p>
+            </>}
             {rule.kind === 'mock' ? <textarea className="text-input tool-text mono" aria-label="模拟响应正文" placeholder="模拟响应正文" value={rule.value} onChange={event => patch(index, { value: event.target.value })} />
               : (local || rule.kind === 'redirect' || header && !rule.kind.endsWith('-remove')) && <input className="text-input mono" value={rule.value}
                 aria-label="映射目标或标头值" placeholder={local ? '本地绝对路径' : rule.kind === 'redirect' ? 'https://staging.example.test/v1/' : '标头值'} onChange={event => patch(index, { value: event.target.value })} />}
           </div>}
         </section>
       })}</div>
-      <button className="btn subtle-button" onClick={add} disabled={rules.length >= 100}><CirclePlus size={13} /> 添加规则</button>
+      <div className="field-line">
+        <button className="btn subtle-button" onClick={() => add('mock')} disabled={rules.length >= 100}><CirclePlus size={13} /> 添加规则</button>
+        <button className="btn subtle-button" onClick={() => add('script')} disabled={rules.length >= 100}>添加脚本</button>
+      </div>
     </div>
     <div className="modal-actions"><button className="btn subtle-button" onClick={close}>关闭</button><button className="btn capture-button" disabled={pending} onClick={() => submit(rules)}>应用规则</button></div>
   </div>
 }
 
-const filterFields: Record<string, string> = { url: 'URL', host: '主机', method: '方法', status: '状态', type: '内容类型', requestHeaders: '请求标头', responseHeaders: '响应标头', requestBody: '请求正文', responseBody: '响应正文' }
+const filterFields: Record<string, string> = { url: 'URL', host: '主机', client: 'Client', method: '方法', status: '状态', type: '内容类型', requestHeaders: '请求标头', responseHeaders: '响应标头', requestBody: '请求正文', responseBody: '响应正文' }
 const filterOps: Record<string, string> = { contains: '包含', is: '等于', not: '不包含', starts: '开头是', ends: '结尾是', regex: '正则' }
 
 export function FilterPanel({ initial, any, submit, close }: { initial: Condition[], any: boolean, submit: (filters: Condition[], any: boolean) => void, close: () => void }) {
@@ -173,7 +190,10 @@ export function BreakpointPanel({ detail, pending, submit, close }: { detail: De
 
 function comparisonText(detail: Detail | null, view: string) {
   if (!detail) return ''
-  if (view === 'headers') return headerText(detail.responseHeaders).split('\n').sort().join('\n')
+  if (view === 'response-headers' || view === 'request-headers') {
+    return headerText(view === 'response-headers' ? detail.responseHeaders : detail.requestHeaders).split('\n').sort().join('\n')
+  }
+  if (view === 'frames') return (detail.frames ?? []).map(frame => `${frame.direction} ${frame.opcode} ${frame.size} B ${textOf(frame.data) || frame.data || ''}`).join('\n')
   const text = textOf(view === 'request' ? detail.requestBody : detail.responseBody)
   try { return JSON.stringify(JSON.parse(text), null, 2) } catch { return text }
 }
@@ -196,23 +216,60 @@ function compareLines(first: string, second: string) {
 export function DiffPanel({ base, rows, fetchDetail }: { base: Detail, rows: Row[], fetchDetail: (id: number) => Promise<Detail> }) {
   const [other, setOther] = useState<Detail | null>(null)
   const [view, setView] = useState('response')
-  const [target, setTarget] = useState(0)
+  const [target, setTarget] = useState<number>()
   const [problem, setProblem] = useState('')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(0)
+  const pageSize = 6
+  const candidates = useMemo(() => {
+    const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean)
+    return rows.filter(item => {
+      if (item.id === base.id || item.pending) return false
+      const text = `${item.id} ${item.method} ${item.url} ${item.status} ${item.client?.name ?? ''} ${item.client?.address ?? ''}`.toLowerCase()
+      return words.every(word => /^#\d+$/.test(word) ? word === `#${item.id}` : text.includes(word))
+    })
+  }, [rows, base.id, search])
+  const currentPage = Math.min(page, Math.max(0, Math.ceil(candidates.length / pageSize) - 1))
+  useEffect(() => {
+    if (target === undefined) return
+    let active = true
+    void fetchDetail(target).then(value => { if (active) setOther(value) })
+      .catch(error => { if (active) setProblem(error instanceof Error ? error.message : String(error)) })
+    return () => { active = false }
+  }, [target, fetchDetail])
   const diff = useMemo(() => other ? compareLines(comparisonText(base, view), comparisonText(other, view)) : [], [base, other, view])
   return <div className="dialog-section tool-fields">
-    <div className="field-line"><strong className="mono">基准 #{base.id}</strong><select className="text-input stretch" aria-label="选择对比请求" value={target || ''} onChange={event => {
-      const id = Number(event.target.value)
-      setTarget(id); setOther(null); setProblem('')
-      void fetchDetail(id).then(value => { setOther(current => current?.id === id ? current : value) }).catch(error => setProblem(String(error)))
-    }}><option value="" disabled>选择对比请求</option>{rows.filter(item => item.id !== base.id && !item.pending).map(item => <option key={item.id} value={item.id}>#{item.id} {item.method} {item.path}</option>)}</select>
-    <select className="text-input" aria-label="对比内容" value={view} onChange={event => setView(event.target.value)}><option value="response">响应正文</option><option value="request">请求正文</option><option value="headers">响应标头</option></select></div>
+    <div className="field-line"><strong className="mono">基准 #{base.id}</strong>
+      <input className="text-input stretch" aria-label="搜索对比请求" placeholder="搜索请求编号、URL、方法或 Client"
+        value={search} onChange={event => { setSearch(event.target.value); setPage(0) }} />
+      <select className="text-input" aria-label="对比内容" value={view} onChange={event => setView(event.target.value)}>
+        <option value="response">响应正文</option><option value="request">请求正文</option>
+        <option value="response-headers">响应标头</option><option value="request-headers">请求标头</option>
+        {(base.kind === 'WebSocket' || other?.kind === 'WebSocket' || view === 'frames') && <option value="frames">WebSocket 帧</option>}
+      </select>
+    </div>
+    <div className="request-picker" aria-label="对比候选请求">
+      {candidates.slice(currentPage * pageSize, (currentPage + 1) * pageSize).map(item => <button className="request-picker-row mono"
+        type="button" key={item.id} aria-pressed={item.id === target} onClick={() => {
+          if (item.id !== target) { setTarget(item.id); setOther(null); setProblem('') }
+        }}>
+        <span>#{item.id}</span><span>{item.method}</span><span title={item.url}>{item.host}{item.path}</span><span>{item.status || '—'}</span>
+      </button>)}
+      {!candidates.length && <span className="request-picker-empty">没有匹配的已完成请求</span>}
+    </div>
+    {candidates.length > pageSize && <div className="request-picker-pages">
+      <span className="muted">{currentPage * pageSize + 1}–{Math.min((currentPage + 1) * pageSize, candidates.length)} / {candidates.length}</span>
+      <button className="btn subtle-button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>上一页</button>
+      <button className="btn subtle-button" disabled={(currentPage + 1) * pageSize >= candidates.length} onClick={() => setPage(currentPage + 1)}>下一页</button>
+    </div>}
     {problem && <p role="alert">{problem}</p>}
-    {other?.id === target && <>
+    {target !== undefined && !other && !problem && <p role="status">正在读取 #{target}…</p>}
+    {other && <>
       <div className="diff-summary mono"><span>#{base.id} · {base.status} · {base.duration} ms</span><span>#{other.id} · {other.status} · {other.duration} ms</span></div>
       <div className="diff-code mono">{diff.map(({ left, right, changed }, index) => <div key={index}>
         <span className={changed && left !== undefined ? 'diff-removed' : ''}>{left ?? ''}</span><span className={changed && right !== undefined ? 'diff-added' : ''}>{right ?? ''}</span>
       </div>)}</div>
-      <p>对比显示各侧正文或标头的前 280 行，最长 30,000 字符。</p>
+      <p>每侧展示前 280 行，最多 30,000 字符。</p>
     </>}
   </div>
 }

@@ -36,6 +36,7 @@ type Engine struct {
 }
 
 type listener struct {
+	context context.Context
 	address string
 	server  *http.Server
 	cancel  context.CancelFunc
@@ -95,11 +96,14 @@ func (e *Engine) Start(port int, allowAlternatePort bool) (string, error) {
 		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	run := &listener{address: ln.Addr().String(), conns: make(map[net.Conn]struct{}), cancel: cancel}
+	run := &listener{context: ctx, address: ln.Addr().String(), conns: make(map[net.Conn]struct{}), cancel: cancel}
 	run.server = &http.Server{
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if !config.permits(r.RemoteAddr) {
 				http.Error(w, "此客户端未获准连接 Peekly", http.StatusForbidden)
+				return
+			}
+			if e.deviceSetup(w, r) {
 				return
 			}
 			if r.Method == http.MethodConnect {
@@ -109,6 +113,7 @@ func (e *Engine) Start(port int, allowAlternatePort bool) (string, error) {
 			e.forward(run, w, r, "")
 		}),
 		BaseContext:       func(net.Listener) context.Context { return ctx },
+		ConnContext:       connectionClient,
 		ConnState:         run.connState,
 		ReadHeaderTimeout: 12 * time.Second,
 		IdleTimeout:       90 * time.Second,
@@ -235,8 +240,8 @@ func (e *Engine) SetRules(input []string) ([]string, error) {
 			continue
 		}
 		host := strings.TrimPrefix(value, "*.")
-		if !validHost(host) || (host != value && (net.ParseIP(host) != nil || !strings.Contains(host, "."))) {
-			return nil, fmt.Errorf("无效域名规则 %q，请填写域名、IP 或 *.example.com", value)
+		if value != "*" && (!validHost(host) || (host != value && (net.ParseIP(host) != nil || !strings.Contains(host, ".")))) {
+			return nil, fmt.Errorf("无效域名规则 %q，请填写域名、IP、*.example.com 或 *", value)
 		}
 		if !seen[value] {
 			rules = append(rules, value)
@@ -279,7 +284,7 @@ func (e *Engine) authorityFor(host string) *authority {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	for _, rule := range e.rules {
-		if rule == host || (strings.HasPrefix(rule, "*.") && strings.HasSuffix(host, rule[1:])) {
+		if rule == "*" || rule == host || (strings.HasPrefix(rule, "*.") && strings.HasSuffix(host, rule[1:])) {
 			return e.authority
 		}
 	}
@@ -320,7 +325,7 @@ func (e *Engine) connect(run *listener, w http.ResponseWriter, r *http.Request) 
 	for _, rule := range e.matchingRules("https://" + target) {
 		switch rule.Kind {
 		case "block":
-			row := Row{Started: time.Now(), Method: "CONNECT", URL: "https://" + target, Host: host, Path: "HTTPS 隧道", Kind: "Tunnel", Status: 403, Rule: "block"}
+			row := Row{Started: time.Now(), Client: requestClient(r), Method: "CONNECT", URL: "https://" + target, Host: host, Path: "HTTPS 隧道", Kind: "Tunnel", Status: 403, Rule: "block"}
 			e.store.insert(row)
 			http.Error(w, "请求被 Peekly 规则阻止", http.StatusForbidden)
 			return
@@ -332,7 +337,7 @@ func (e *Engine) connect(run *listener, w http.ResponseWriter, r *http.Request) 
 		e.intercept(run, w, r, target, host, a)
 		return
 	}
-	row := Row{Started: time.Now(), Method: "CONNECT", URL: "https://" + target, Host: host, Path: "HTTPS 隧道", Kind: "Tunnel", Pending: true}
+	row := Row{Started: time.Now(), Client: requestClient(r), Method: "CONNECT", URL: "https://" + target, Host: host, Path: "HTTPS 隧道", Kind: "Tunnel", Pending: true}
 	var id uint64
 	if !bypass {
 		id = e.store.insert(row)
@@ -390,7 +395,7 @@ func (e *Engine) intercept(run *listener, w http.ResponseWriter, r *http.Request
 	cancel()
 	_ = conn.SetDeadline(time.Time{})
 	if err != nil {
-		row := Row{Started: time.Now(), Method: "CONNECT", URL: "https://" + target, Host: host, Path: "TLS 握手", Kind: "HTTPS", Error: err.Error()}
+		row := Row{Started: time.Now(), Client: requestClient(r), Method: "CONNECT", URL: "https://" + target, Host: host, Path: "TLS 握手", Kind: "HTTPS", Error: err.Error()}
 		e.store.insert(row)
 		return
 	}
@@ -443,7 +448,10 @@ func (e *Engine) forward(run *listener, w http.ResponseWriter, r *http.Request, 
 	if upgrade {
 		kind = "WebSocket"
 	}
-	row := Row{Started: time.Now(), Method: r.Method, URL: dest.String(), Host: normalizeHost(dest.Hostname()), Path: dest.RequestURI(), Kind: kind, Pending: true}
+	row := Row{Started: time.Now(), Client: requestClient(r), Method: r.Method, URL: dest.String(), Host: normalizeHost(dest.Hostname()), Path: dest.RequestURI(), Kind: kind, Pending: true}
+	if run == nil && row.Client == nil {
+		row.Source = "Peekly"
+	}
 	matches, denied := e.requestRules(row.URL)
 	bypass := false
 	for _, rule := range matches {
@@ -488,6 +496,13 @@ func (e *Engine) forward(run *listener, w http.ResponseWriter, r *http.Request, 
 		switch rule.Kind {
 		case "allow":
 			continue
+		case "script":
+			modified, scriptErr := applyScript(rule.program, "onRequest", detail, out.Header, &out.Body, &out.ContentLength, nil)
+			if scriptErr != nil {
+				detail.ScriptError = scriptErr.Error()
+			} else if modified {
+				out.TransferEncoding, out.GetBody, out.Trailer = nil, nil, nil
+			}
 		case "block":
 			resp = stringResponse(http.StatusForbidden, "text/plain; charset=utf-8", "请求被 Peekly 规则阻止")
 		case "mock":
@@ -570,10 +585,18 @@ func (e *Engine) forward(run *listener, w http.ResponseWriter, r *http.Request, 
 		e.fail(w, id, detail, err)
 		return id
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	for _, rule := range matches {
 		if !bypass && !denied {
 			updateRuleHeader(rule, resp.Header, "response")
+			if rule.Kind == "script" && resp.StatusCode != http.StatusSwitchingProtocols {
+				modified, scriptErr := applyScript(rule.program, "onResponse", detail, resp.Header, &resp.Body, &resp.ContentLength, &resp.StatusCode)
+				if scriptErr != nil {
+					detail.ScriptError = scriptErr.Error()
+				} else if modified {
+					resp.TransferEncoding, resp.Trailer = nil, nil
+				}
+			}
 		}
 	}
 	if noCache {
@@ -588,7 +611,7 @@ func (e *Engine) forward(run *listener, w http.ResponseWriter, r *http.Request, 
 			e.fail(w, id, detail, errors.New("编辑器不支持升级为 WebSocket"))
 			return id
 		}
-		e.websocket(run, w, r, id, detail, resp)
+		e.websocket(run, w, id, detail, resp)
 		return id
 	}
 	if resBreak {
@@ -700,7 +723,7 @@ func websocketUpgrade(head http.Header) bool {
 	return false
 }
 
-func (e *Engine) websocket(run *listener, w http.ResponseWriter, r *http.Request, id uint64, detail Detail, resp *http.Response) {
+func (e *Engine) websocket(run *listener, w http.ResponseWriter, id uint64, detail Detail, resp *http.Response) {
 	upstream, ok := resp.Body.(io.ReadWriteCloser)
 	if !ok || !websocketUpgrade(resp.Header) {
 		e.fail(w, id, detail, errors.New("无效的 WebSocket 握手"))
@@ -713,7 +736,9 @@ func (e *Engine) websocket(run *listener, w http.ResponseWriter, r *http.Request
 	}
 	defer run.forget(conn)
 	defer conn.Close()
-	stop := context.AfterFunc(r.Context(), func() { _ = conn.Close(); _ = upstream.Close() })
+	// Once hijacked, the socket can outlive the HTTP request context. Stop the
+	// relay with the proxy listener rather than a nested HTTPS HTTP handler.
+	stop := context.AfterFunc(run.context, func() { _ = conn.Close(); _ = upstream.Close() })
 	defer stop()
 	_, err = buffered.WriteString("HTTP/1.1 101 Switching Protocols\r\n")
 	headers := resp.Header.Clone()

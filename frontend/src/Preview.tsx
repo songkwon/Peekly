@@ -23,16 +23,29 @@ export function TimingDetails({ detail }: { detail: Detail | null }) {
   </div>
 }
 
-export function FramesPreview({ frames, count }: { frames: Frame[], count: number }) {
+export function FramesPreview({ frames, count, copy }: { frames: Frame[], count: number, copy: (text: string) => void }) {
+  const [direction, setDirection] = useState('')
+  const [query, setQuery] = useState('')
+  const matches = frames.map(frame => {
+    const preview = frame.opcode === 1 && !frame.compressed ? new TextDecoder().decode(readBytes(frame.data)) : hex(readBytes(frame.data))
+    return { frame, preview }
+  }).filter(({ frame, preview }) => (!direction || frame.direction === direction) && preview.toLowerCase().includes(query.toLowerCase()))
   const labels: Record<number, string> = { 0: 'Continuation', 1: 'Text', 2: 'Binary', 8: 'Close', 9: 'Ping', 10: 'Pong' }
   return frames.length ? <div className="frames-preview">
+    <div className="field-line frame-filters">
+      <select className="text-input" aria-label="WebSocket 帧方向" value={direction} onChange={event => setDirection(event.target.value)}>
+        <option value="">全部帧</option><option value="send">已发送</option><option value="receive">已接收</option>
+      </select>
+      <input className="text-input stretch" aria-label="搜索 WebSocket 帧" placeholder="搜索帧预览" value={query} onChange={event => setQuery(event.target.value)} />
+    </div>
     {count > frames.length && <p>保留最近 {frames.length} 帧，共 {count} 帧。</p>}
-    {frames.map((frame, index) => {
-      const preview = frame.opcode === 1 && !frame.compressed ? new TextDecoder().decode(readBytes(frame.data)) : hex(readBytes(frame.data))
+    {!matches.length && <p>没有匹配的帧</p>}
+    {matches.map(({ frame, preview }, index) => {
       return <details className="preview-item" key={`${frame.time}-${index}`}><summary className="mono">
         {frame.direction === 'send' ? '↑' : '↓'} {labels[frame.opcode] ?? frame.opcode} · {frame.size} B{frame.compressed ? ' · 压缩' : ''}{!frame.final ? ' · 分片' : ''}
         <time>{new Date(frame.time).toLocaleTimeString()}</time>
-      </summary><pre>{preview || '无载荷'}</pre></details>
+      </summary><pre>{preview || '无载荷'}</pre>
+      <button type="button" className="btn small-button" disabled={!preview} onClick={() => copy(preview)}>复制帧预览</button></details>
     })}
   </div> : <div className="body-empty">等待 WebSocket 帧</div>
 }

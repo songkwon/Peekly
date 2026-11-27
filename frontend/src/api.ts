@@ -1,8 +1,10 @@
 export type Kind = 'HTTP' | 'HTTPS' | 'WebSocket' | 'Tunnel'
+export interface Client { address: string, name?: string, pid?: number }
 export type Headers = Record<string, string[]> | null
 
 export interface Row {
   id: number
+  client?: Client
   started: string
   method: string
   url: string
@@ -22,6 +24,7 @@ export interface Row {
 }
 
 export interface Detail extends Row {
+  scriptError?: string
   requestHeaders: Headers
   responseHeaders: Headers
   requestBody: string | null

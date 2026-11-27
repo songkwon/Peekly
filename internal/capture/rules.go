@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/dop251/goja"
 )
 
 type Rule struct {
@@ -29,7 +31,8 @@ type Rule struct {
 
 type compiledRule struct {
 	Rule
-	regex *regexp.Regexp
+	regex   *regexp.Regexp
+	program *goja.Program
 }
 
 var headerName = regexp.MustCompile("^[!#$%&'*+.^_`|~0-9A-Za-z-]+$")
@@ -67,6 +70,11 @@ func compileRules(input []Rule) ([]compiledRule, error) {
 		}
 		switch rule.Kind {
 		case "block", "allow", "bypass", "no-cache", "break-request", "break-response":
+		case "script":
+			rule.program, err = goja.Compile("peekly.js", rule.Value, true)
+			if err != nil {
+				return nil, fmt.Errorf("规则 %d 的脚本有语法错误: %w", i+1, err)
+			}
 		case "mock":
 			if rule.Number < 200 || rule.Number > 599 {
 				return nil, fmt.Errorf("规则 %d 的模拟状态码需在 200–599 之间", i+1)
