@@ -1,6 +1,8 @@
 //go:build darwin && cgo
 
-#import <AppKit/AppKit.h>
+#import <Foundation/Foundation.h>
+#import <CoreGraphics/CoreGraphics.h>
+#import <ImageIO/ImageIO.h>
 #import <libproc.h>
 #import <string.h>
 
@@ -22,6 +24,56 @@ char *peekly_process_bundle(int pid) {
     }
 }
 
+static NSURL *bundleIconURL(NSBundle *bundle) {
+    for (NSString *key in @[@"CFBundleIconFile", @"CFBundleIconName"]) {
+        id file = [bundle objectForInfoDictionaryKey:key];
+        if (![file isKindOfClass:[NSString class]] || ![file length]) {
+            continue;
+        }
+        NSString *extension = [file pathExtension];
+        NSURL *url = extension.length
+            ? [bundle URLForResource:file withExtension:nil]
+            : [bundle URLForResource:file withExtension:@"icns"];
+        if (url) {
+            return url;
+        }
+    }
+    return nil;
+}
+
+static CGImageRef bundleIconImage(NSURL *url, const size_t size) {
+    if (!url) {
+        return NULL;
+    }
+    CGImageSourceRef source = CGImageSourceCreateWithURL((CFURLRef)url, NULL);
+    if (!source) {
+        return NULL;
+    }
+    // Prefer the smallest representation that will fill the requested size.
+    size_t bestIndex = 0;
+    size_t bestDistance = SIZE_MAX;
+    for (size_t index = 0; index < CGImageSourceGetCount(source); index++) {
+        NSDictionary *properties = (NSDictionary *)CGImageSourceCopyPropertiesAtIndex(source, index, NULL);
+        size_t width = [properties[(NSString *)kCGImagePropertyPixelWidth] unsignedLongValue];
+        size_t height = [properties[(NSString *)kCGImagePropertyPixelHeight] unsignedLongValue];
+        [properties release];
+        size_t dimension = MIN(width, height);
+        size_t distance = dimension >= size ? dimension - size : SIZE_MAX - dimension;
+        if (distance < bestDistance) {
+            bestIndex = index;
+            bestDistance = distance;
+        }
+    }
+    NSDictionary *options = @{
+        (NSString *)kCGImageSourceCreateThumbnailFromImageAlways: @YES,
+        (NSString *)kCGImageSourceThumbnailMaxPixelSize: @(size),
+        (NSString *)kCGImageSourceCreateThumbnailWithTransform: @YES,
+    };
+    CGImageRef image = CGImageSourceCreateThumbnailAtIndex(source, bestIndex, (CFDictionaryRef)options);
+    CFRelease(source);
+    return image;
+}
+
 void peekly_application_details(const char *path, char **name, char **png) {
     @autoreleasepool {
         NSString *location = [[NSFileManager defaultManager] stringWithFileSystemRepresentation:path length:strlen(path)];
@@ -38,30 +90,20 @@ void peekly_application_details(const char *path, char **name, char **png) {
         }
         *name = strdup([title UTF8String]);
 
-        const size_t size = 32;
-        NSImage *icon = [[NSWorkspace sharedWorkspace] iconForFile:location];
-        NSRect proposed = NSMakeRect(0, 0, size, size);
-        CGImageRef source = [icon CGImageForProposedRect:&proposed context:nil hints:nil];
-        if (!source) {
+        // Decode the bundle resource without opening a connection to the desktop workspace.
+        CGImageRef image = bundleIconImage(bundleIconURL(bundle), 32);
+        if (!image) {
             return;
         }
-        CGColorSpaceRef color = CGColorSpaceCreateDeviceRGB();
-        CGContextRef context = CGBitmapContextCreate(NULL, size, size, 8, size * 4, color, (CGBitmapInfo)kCGImageAlphaPremultipliedLast);
-        CGColorSpaceRelease(color);
-        if (!context) {
-            return;
-        }
-        CGContextSetInterpolationQuality(context, kCGInterpolationHigh);
-        CGContextDrawImage(context, CGRectMake(0, 0, size, size), source);
-        CGImageRef image = CGBitmapContextCreateImage(context);
-        if (image) {
-            NSBitmapImageRep *bitmap = [[[NSBitmapImageRep alloc] initWithCGImage:image] autorelease];
-            NSData *data = [bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}];
-            if (data.length) {
+        NSMutableData *data = [NSMutableData data];
+        CGImageDestinationRef destination = CGImageDestinationCreateWithData((CFMutableDataRef)data, CFSTR("public.png"), 1, NULL);
+        if (destination) {
+            CGImageDestinationAddImage(destination, image, NULL);
+            if (CGImageDestinationFinalize(destination)) {
                 *png = strdup([[data base64EncodedStringWithOptions:0] UTF8String]);
             }
-            CGImageRelease(image);
+            CFRelease(destination);
         }
-        CGContextRelease(context);
+        CGImageRelease(image);
     }
 }

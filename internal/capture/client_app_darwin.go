@@ -3,7 +3,7 @@
 package capture
 
 /*
-#cgo LDFLAGS: -framework AppKit -framework CoreGraphics
+#cgo LDFLAGS: -framework Foundation -framework CoreGraphics -framework ImageIO
 #include <stdlib.h>
 char *peekly_process_bundle(int pid);
 void peekly_application_details(const char *path, char **name, char **png);
