@@ -470,7 +470,7 @@ export function App() {
         await api.restoreSystemProxy(); await refresh(); showToast('已恢复原系统代理')
       })}>恢复系统代理</button>}
       {desktopProblem && <span className="desktop-error" title={desktopProblem}>桌面连接异常</span>}
-      <div className="footer-end"><span>{visible.length === rows.length ? `${visible.length} 条请求` : `${visible.length} / ${rows.length} 条请求`}</span><span className="foot-divider"></span><span className={errorCount ? 'footer-error' : ''}>{errorCount} 错误</span><span className="foot-divider"></span><span className="mono">v0.3.0</span></div>
+      <div className="footer-end"><span>{visible.length === rows.length ? `${visible.length} 条请求` : `${visible.length} / ${rows.length} 条请求`}</span><span className="foot-divider"></span><span className={errorCount ? 'footer-error' : ''}>{errorCount} 错误</span><span className="foot-divider"></span><span className="mono">v0.3.1</span></div>
     </footer>
     {toast && !dialog && <div className={`toast-bar ${toast.error ? 'toast-error' : ''}`} role={toast.error ? 'alert' : 'status'}>{toast.error ? <CircleHelp size={17} /> : <Check size={17} />}{toast.message}</div>}
     {dialog === 'capture-mode' && <Modal title="开始抓包" icon={<Circle size={18} />} notice={toast} onClose={() => setDialog(null)}>
