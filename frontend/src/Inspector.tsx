@@ -5,6 +5,7 @@ import { header, readBytes } from './api'
 import type { Detail, Headers, Row } from './api'
 import { FramesPreview, KeyValueList, SpecialPreview, TimingDetails } from './Preview'
 import type { Format } from './Preview'
+import { SelectField } from './SelectField'
 
 export const methodTone = (method: string) => ({ GET: 'green', POST: 'violet', PATCH: 'blue', PUT: 'blue', DELETE: 'red', CONNECT: 'grey' }[method] ?? 'grey')
 export const statusTone = (status: number) => status >= 400 ? 'red' : status >= 300 ? 'amber' : status >= 200 ? 'green' : 'grey'
@@ -113,10 +114,10 @@ function Payload({ side, row, detail, copy, saveBody }: { side: Side, row: Row, 
       <div className="payload-tabs">{tabs.map(([key, label]) =>
         <button key={key} className={view === key ? 'selected' : ''} aria-pressed={view === key} onClick={() => setView(key)}>{label}</button>)}</div>
       {view === 'body' && <div className="payload-actions">
-        <select className="preview-format" aria-label="正文显示格式" value={format} onChange={event => setFormat(event.target.value as Format)}>
-          <option value="text">{isJson ? 'JSON' : '文本'}</option><option value="tree">树形</option><option value="hex">Hex</option>
-          <option value="raw">Raw</option><option value="protocol">协议</option><option value="image">图片</option>
-        </select>
+        <SelectField className="preview-format" aria-label="正文显示格式" value={format} onChange={setFormat} options={[
+          { value: 'text', label: isJson ? 'JSON' : '文本' }, { value: 'tree', label: '树形' }, { value: 'hex', label: 'Hex' },
+          { value: 'raw', label: 'Raw' }, { value: 'protocol', label: '协议' }, { value: 'image', label: '图片' },
+        ]} />
         <button className="btn icon-button" aria-label="切换原始内容" title="格式化 / 原始内容" aria-pressed={raw} onClick={() => setRaw(!raw)}><Code2 size={13} /></button>
         <button className="btn icon-button" aria-label="自动换行" title="自动换行" aria-pressed={wrap} onClick={() => setWrap(!wrap)}><WrapText size={13} /></button>
         {saveBody && <button className="btn icon-button" aria-label="保存正文" title="保存正文预览" disabled={!body} onClick={() => saveBody(request)}><ArrowDownToLine size={13} /></button>}

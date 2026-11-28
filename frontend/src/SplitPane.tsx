@@ -3,6 +3,7 @@ import { Search } from 'lucide-react'
 import { api } from './api'
 import type { Detail, Row } from './api'
 import { Inspector, Status, methodTone } from './Inspector'
+import { SelectField } from './SelectField'
 
 export function clientLabel(row: Row) {
   return row.client?.name || (row.client?.pid ? `PID ${row.client.pid}` : row.client?.address) || row.source || '未知'
@@ -38,9 +39,8 @@ export function SplitPane({ rows, copy, compare }: { rows: Row[], copy: (text: s
   return <section className="split-pane" aria-label="右侧流量窗格">
     <div className="split-filter">
       <label className="input search-field"><Search size={13} /><input aria-label="搜索右侧请求" placeholder="筛选 URL、Client、状态…" value={query} onChange={event => setQuery(event.target.value)} /></label>
-      <select className="text-input" aria-label="右侧协议" value={protocol} onChange={event => setProtocol(event.target.value)}>
-        <option value="">全部协议</option><option>HTTP</option><option>HTTPS</option><option>WebSocket</option>
-      </select>
+      <SelectField aria-label="右侧协议" value={protocol} onChange={setProtocol}
+        options={[{ value: '', label: '全部协议' }, 'HTTP', 'HTTPS', 'WebSocket']} />
     </div>
     <div className="split-rows">
       <table aria-label="右侧请求列表">

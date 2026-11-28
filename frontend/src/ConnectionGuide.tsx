@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { ArrowRight, Check, Clipboard, Globe2, Monitor, Radio, Terminal } from 'lucide-react'
+import { SelectField, selectOptions } from './SelectField'
 
 export function ConnectionGuide({ address, host, running, platform, portDraft, setPortDraft, savePort, savedPort, automaticActive, captureMode, setCaptureMode, appearance, setAppearance, copy }: {
   address: string, host: string, running: boolean, platform: string, portDraft: string, setPortDraft: (value: string) => void,
@@ -11,6 +12,12 @@ export function ConnectionGuide({ address, host, running, platform, portDraft, s
   const [device, setDevice] = useState<'ios' | 'android' | 'simulator' | 'emulator'>('ios')
   const windows = platform === 'windows'
   const listeningPort = running ? Number(address.slice(address.lastIndexOf(':') + 1)) : savedPort
+  const physicalDevice = device === 'ios' || device === 'android'
+  const simulator = device === 'simulator'
+  const localOnly = host === '127.0.0.1'
+  const deviceProxy = device === 'emulator' && localOnly ? `10.0.2.2:${listeningPort}` : `${host}:${listeningPort}`
+  const deviceCheck = 'http://peekly.test/'
+  const simulatorCertificate = 'xcrun simctl keychain booted add-root-cert /path/to/Peekly.cer'
   const usingAlternatePort = running && listeningPort !== savedPort
   const command = `${windows ? 'curl.exe' : 'curl'} --proxy http://${address} http://example.com/`
   const guides = [{ id: 'system', title: '系统代理', icon: Monitor }, { id: 'terminal', title: '终端', icon: Terminal }, { id: 'device', title: '移动端', icon: Globe2 }] as const
@@ -46,30 +53,39 @@ export function ConnectionGuide({ address, host, running, platform, portDraft, s
             {([['ios', 'iPhone / iPad'], ['android', 'Android'], ['simulator', 'iOS 模拟器'], ['emulator', 'Android 模拟器']] as const).map(([id, label]) =>
               <button type="button" key={id} className="btn subtle-button" aria-pressed={device === id} onClick={() => setDevice(id)}>{label}</button>)}
           </div>
-          <ol className="guide-steps">
-            <li><span>1</span><div><strong>启动电脑端代理</strong>
-              <p>{device === 'simulator' ? '在 Mac 上启动模拟器，Peekly 选择「使用系统代理」。' : device === 'emulator' ?
-                '在电脑上启动 Peekly。用回环地址监听时，Android Studio 模拟器可通过 10.0.2.2 访问电脑。' :
-                '手机和电脑连接同一 Wi-Fi。在「网络设置」选择电脑的局域网 IP，允许手机 IP，然后将「抓包方式」设为手动连接并启动。'}</p>
-              {device !== 'simulator' && device !== 'emulator' && host === '127.0.0.1' && <p>当前监听本机回环地址，请先切换到局域网地址。</p>}
-            </div></li>
-            <li><span>2</span><div><strong>设置代理并测试</strong>
-              <p>{device === 'ios' ? '设置 → Wi-Fi → 当前网络 → 配置代理 → 手动。' :
-                device === 'simulator' ? '在模拟器 Safari 打开下方地址，确认能连接 Peekly。' :
-                '在 Android 的当前 Wi-Fi 网络编辑页面，把系统代理设为手动。'}</p>
-              {device !== 'simulator' && (device === 'emulator' || host !== '127.0.0.1') && <button className="command-block mono" type="button" onClick={() => copy(`${device === 'emulator' && host === '127.0.0.1' ? '10.0.2.2' : host}:${listeningPort}`)}>
-                <code>{device === 'emulator' && host === '127.0.0.1' ? '10.0.2.2' : host}:{listeningPort}</code><Clipboard size={13} /></button>}
-              <p>在设备浏览器打开测试页面。页面有连接状态和根证书下载入口。</p>
-              <button className="command-block mono" type="button" onClick={() => copy('http://peekly.test/')}><code>http://peekly.test/</code><Clipboard size={13} /></button>
-            </div></li>
-            <li><span>3</span><div><strong>信任证书并启用 HTTPS 解密</strong>
-              <p>{device === 'ios' ? '下载后在「设置 → 已下载的描述文件」安装，再到「设置 → 通用 → 关于本机 → 证书信任设置」开启对 Peekly 根证书的完全信任。' :
-                device === 'simulator' ? '在 Peekly 导出根证书后，用 Xcode 命令行工具将根证书加入已启动的模拟器。' :
-                '下载证书，在「设置 → 安全 → 加密与凭据 → 安装证书」选择 CA 证书。不同机型的菜单名称可能不同。自己的调试版 App 需要在 Network Security Config 中声明信任调试 CA。'}</p>
-              {device === 'simulator' && <button className="command-block mono" type="button" onClick={() => copy('xcrun simctl keychain booted add-root-cert /path/to/Peekly.cer')}><code>xcrun simctl keychain booted add-root-cert /path/to/Peekly.cer</code><Clipboard size={13} /></button>}
-              <p>返回 Peekly 的「HTTPS 解密」，选择目标域名或开启全域名。结束后撤销设备代理设置。</p>
-            </div></li>
-          </ol>
+          {simulator && windows ? <p className="guide-footnote">iOS 模拟器需要在 Mac 上运行。</p> : <>
+            <ol className="guide-steps">
+              <li><span>1</span><div><strong>启动抓包</strong>
+                <p>{physicalDevice ? '手机和电脑连同一 Wi-Fi。在 Peekly 的「网络设置」选择电脑的局域网 IP，允许手机 IP，再以手动模式开始抓包。'
+                  : simulator ? '启动 iOS 模拟器，再在 Peekly 中选择「使用系统代理」。'
+                  : '启动 Android Studio 模拟器，并在 Peekly 中开始抓包。'}</p>
+              </div></li>
+              <li><span>2</span><div><strong>{simulator ? '检查连接' : '设置设备代理'}</strong>
+                {!simulator && <p>{device === 'ios' ? '在设备上打开「设置 → Wi-Fi → 当前网络 → 配置代理 → 手动」。'
+                  : '在 Android 的「设置 → Wi-Fi → 当前网络」中，把代理设为手动。'}</p>}
+                {!simulator && (physicalDevice && localOnly ? <p>请先将监听地址从 127.0.0.1 改为局域网 IP。</p> :
+                  <button className="command-block mono" type="button" onClick={() => copy(deviceProxy)}>
+                    <code>{deviceProxy}</code><Clipboard size={13} />
+                  </button>)}
+                <p>代理设好后，在设备浏览器输入以下 HTTP 地址。出现「已通过 Peekly 连接」即成功。</p>
+                <button className="command-block mono" type="button" onClick={() => copy(deviceCheck)}><code>{deviceCheck}</code><Clipboard size={13} /></button>
+              </div></li>
+            </ol>
+            <details>
+              <summary>查看 HTTPS 正文时，再安装证书</summary>
+              <p>{device === 'ios' ? '从连接检查页下载证书，在「设置 → 已下载的描述文件」安装。再到「通用 → 关于本机 → 证书信任设置」开启完全信任。'
+                : simulator ? '从 Peekly 导出根证书，用以下命令将它加入已启动的模拟器。'
+                : '从连接检查页下载证书，在「设置 → 安全 → 加密与凭据 → 安装证书」中选 CA 证书。自行开发的 App 可在调试配置中信任用户 CA。'}</p>
+              {simulator && <button className="command-block mono" type="button" onClick={() => copy(simulatorCertificate)}>
+                <code>{simulatorCertificate}</code><Clipboard size={13} />
+              </button>}
+              <p>安装后，在 Peekly 的「HTTPS 解密」中启用解密。抓包结束后关闭设备代理。</p>
+            </details>
+            <details>
+              <summary>打不开连接检查页</summary>
+              <p>这个地址由 Peekly 代理提供。确认已启动抓包、设备已使用 Peekly 代理，并保留地址开头的 http://。</p>
+            </details>
+          </>}
         </div>}
         {guide === 'system' && !automaticActive && captureMode === 'manual' && <p className="guide-footnote"><ArrowRight size={12} /> 抓包结束后，撤销为 Peekly 添加的系统代理设置。</p>}
       </div>
@@ -85,16 +101,12 @@ export function ConnectionGuide({ address, host, running, platform, portDraft, s
         </div>
         {running && <small>{usingAlternatePort ? `首选端口被占用，本次使用 ${listeningPort}。` : '停止抓包后可修改端口'}</small>}
         <label htmlFor="capture-mode">抓包方式</label>
-        <select className="text-input" id="capture-mode" disabled={running} value={captureMode ?? 'ask'} onChange={event => {
-          const mode = event.target.value
-          setCaptureMode(mode === 'automatic' || mode === 'manual' ? mode : null)
-        }}>
-          <option value="ask">启动时询问</option><option value="automatic">自动配置系统代理</option><option value="manual">手动连接</option>
-        </select>
+        <SelectField id="capture-mode" disabled={running} value={captureMode ?? 'ask'}
+          options={selectOptions({ ask: '启动时询问', automatic: '自动配置系统代理', manual: '手动连接' })}
+          onChange={mode => setCaptureMode(mode === 'automatic' || mode === 'manual' ? mode : null)} />
         <label htmlFor="appearance">外观</label>
-        <select className="text-input" id="appearance" value={appearance} onChange={event => setAppearance(event.target.value as typeof appearance)}>
-          <option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option>
-        </select>
+        <SelectField id="appearance" value={appearance} onChange={setAppearance}
+          options={[{ value: 'system', label: '跟随系统' }, { value: 'light', label: '浅色' }, { value: 'dark', label: '深色' }]} />
       </div>
     </div>
   </div>

@@ -5,8 +5,10 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"testing"
@@ -14,6 +16,51 @@ import (
 
 	"github.com/coder/websocket"
 )
+
+func TestMobileSetupThroughLANProxy(t *testing.T) {
+	addresses := LocalAddresses()
+	if len(addresses) < 2 {
+		t.Skip("no LAN IPv4 interface")
+	}
+	ip := addresses[1]
+	engine := New(t.TempDir())
+	if err := engine.SetNetwork(NetworkOptions{Bind: ip, Clients: []string{ip}}); err != nil {
+		t.Fatal(err)
+	}
+	address, err := engine.Start(0, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(engine.Stop)
+
+	endpoint := &url.URL{Scheme: "http", Host: address}
+	dialer := &net.Dialer{LocalAddr: &net.TCPAddr{IP: net.ParseIP(ip)}, Timeout: 2 * time.Second}
+	transport := &http.Transport{Proxy: http.ProxyURL(endpoint), DialContext: dialer.DialContext}
+	t.Cleanup(transport.CloseIdleConnections)
+	client := &http.Client{Transport: transport, Timeout: 3 * time.Second}
+
+	page, err := client.Get("http://peekly.test/")
+	if body := responseText(t, page, err); !strings.Contains(body, "已通过 Peekly 连接") {
+		t.Fatalf("setup page did not confirm proxy connection: %s", body)
+	}
+	res, err := client.Get("http://peekly.test/Peekly.cer")
+	certificate, err := x509.ParseCertificate([]byte(responseText(t, res, err)))
+	if err != nil || !certificate.IsCA {
+		t.Fatal("LAN proxy did not deliver a downloadable CA certificate")
+	}
+
+	directTransport := &http.Transport{DialContext: dialer.DialContext}
+	t.Cleanup(directTransport.CloseIdleConnections)
+	direct := &http.Client{Transport: directTransport, Timeout: 3 * time.Second}
+	res, err = direct.Get(endpoint.String() + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected direct connection to be rejected, got %d", res.StatusCode)
+	}
+}
 
 func TestMobileSetupAndHTTPRewrite(t *testing.T) {
 	engine := testEngine(t)
