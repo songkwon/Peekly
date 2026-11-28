@@ -2,9 +2,13 @@ package capture
 
 import (
 	"net/http"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/net/idna"
+	"golang.org/x/net/publicsuffix"
 )
 
 const (
@@ -20,6 +24,7 @@ type Row struct {
 	Method      string    `json:"method"`
 	URL         string    `json:"url"`
 	Host        string    `json:"host"`
+	Domain      string    `json:"domain,omitempty"`
 	Path        string    `json:"path"`
 	Kind        string    `json:"kind"`
 	Status      int       `json:"status"`
@@ -62,7 +67,24 @@ func newStore() *store {
 	return &store{revision: 1, items: make(map[uint64]Detail)}
 }
 
+func registrableDomain(host string) string {
+	host = strings.ToLower(strings.TrimSuffix(host, "."))
+	if _, err := netip.ParseAddr(strings.Trim(host, "[]")); err == nil {
+		return host
+	}
+	ascii, err := idna.Lookup.ToASCII(host)
+	if err != nil {
+		return host
+	}
+	domain, err := publicsuffix.EffectiveTLDPlusOne(ascii)
+	if err != nil {
+		return host
+	}
+	return domain
+}
+
 func (s *store) insert(row Row) uint64 {
+	row.Domain = registrableDomain(row.Host)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.nextID++
@@ -81,9 +103,15 @@ func (s *store) insert(row Row) uint64 {
 func (s *store) update(id uint64, detail Detail) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if previous, ok := s.items[id]; !ok {
+	previous, ok := s.items[id]
+	if !ok {
 		return
-	} else if previous.FrameCount > detail.FrameCount {
+	}
+	detail.Domain = previous.Domain
+	if detail.Host != previous.Host {
+		detail.Domain = registrableDomain(detail.Host)
+	}
+	if previous.FrameCount > detail.FrameCount {
 		detail.FrameCount, detail.Frames = previous.FrameCount, previous.Frames
 	}
 	detail.ID = id

@@ -7,6 +7,8 @@ import (
 	"net"
 )
 
-func localProcess(context.Context, *net.TCPAddr, *net.TCPAddr) (string, int) {
-	return "", 0
+func localProcess(context.Context, *net.TCPAddr, *net.TCPAddr) (string, int, string) {
+	return "", 0, ""
 }
+
+func applicationDetails(string) (string, string) { return "", "" }

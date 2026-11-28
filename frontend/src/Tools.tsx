@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { ArrowUp, ChevronDown, CirclePlus, Play, Trash2 } from 'lucide-react'
 import { readBytes } from './api'
 import type { BreakpointAction, Condition, Detail, Headers, NetworkOptions, RequestInput, Row, Rule } from './api'
+import { SelectField, selectOptions } from './SelectField'
 
 export function textOf(value: string | null | undefined) {
   if (!value) return ''
@@ -40,9 +41,8 @@ export function ComposePanel({ initial, pending, submit, close }: { initial: Det
   return <form onSubmit={event => { event.preventDefault(); submitInput() }}>
     <div className="dialog-section tool-fields">
       <label className="field-label" htmlFor="compose-url">请求地址</label>
-      <div className="field-line"><select className="text-input mono" aria-label="HTTP 方法" value={method} onChange={event => setMethod(event.target.value)}>
-        {Array.from(new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', method])).map(item => <option key={item}>{item}</option>)}
-      </select><input id="compose-url" data-modal-initial-focus className="text-input mono stretch" type="url" required placeholder="https://api.example.test/v1/health" value={url} onChange={event => setURL(event.target.value)} /></div>
+      <div className="field-line"><SelectField className="mono" aria-label="HTTP 方法" value={method} onChange={setMethod}
+        options={[...new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', method])]} /><input id="compose-url" data-modal-initial-focus className="text-input mono stretch" type="url" required placeholder="https://api.example.test/v1/health" value={url} onChange={event => setURL(event.target.value)} /></div>
       {initial?.requestTruncated && <p>已载入截断的请求正文，请按需补全。</p>}
       {initial?.requestBody && !body && <p>原始二进制正文可使用直接重发。编辑器仅接受文本。</p>}
       <label className="field-label" htmlFor="compose-headers">标头</label>
@@ -101,11 +101,9 @@ export function RulesPanel({ initial, pending, submit, close }: { initial: Rule[
             <button className="btn icon-button" title="移除规则" aria-label="移除规则" onClick={() => { setRules(rules.filter((_, i) => i !== index)); setExpanded(-1) }}><Trash2 size={13} /></button>
           </div>
           {expanded === index && <div className="rule-edit">
-            <div className="field-line"><select className="text-input" aria-label="规则动作" value={rule.kind} onChange={event => patch(index, { kind: event.target.value, name: '', value: event.target.value === 'script' ? scriptExample : '', number: event.target.value === 'mock' ? 200 : 100 })}>
-              {Object.entries(ruleKinds).map(([key, title]) => <option key={key} value={key}>{title}</option>)}
-            </select><select className="text-input" aria-label="URL 匹配方式" value={rule.match} onChange={event => patch(index, { match: event.target.value })}>
-              <option value="contains">包含</option><option value="glob">通配符</option><option value="regex">正则</option>
-            </select><input className="text-input mono stretch" aria-label="URL 匹配表达式" placeholder="api.example.test/v1/" value={rule.pattern} onChange={event => patch(index, { pattern: event.target.value })} /></div>
+            <div className="field-line"><SelectField aria-label="规则动作" value={rule.kind} options={selectOptions(ruleKinds)}
+              onChange={kind => patch(index, { kind, name: '', value: kind === 'script' ? scriptExample : '', number: kind === 'mock' ? 200 : 100 })} /><SelectField aria-label="URL 匹配方式" value={rule.match} onChange={match => patch(index, { match })}
+              options={selectOptions({ contains: '包含', glob: '通配符', regex: '正则' })} /><input className="text-input mono stretch" aria-label="URL 匹配表达式" placeholder="api.example.test/v1/" value={rule.pattern} onChange={event => patch(index, { pattern: event.target.value })} /></div>
             {number && <label className="inline-label">{rule.kind === 'mock' ? '状态码' : rule.kind === 'delay' ? '延迟（ms）' : '速率（KiB/s）'}
               <input className="text-input mono" type="number" value={rule.number} onChange={event => patch(index, { number: Number(event.target.value) })} /></label>}
             {(header || rule.kind === 'mock' || rule.kind === 'directory') && <input className="text-input mono" aria-label="标头名称、MIME 或路径前缀"
@@ -144,16 +142,15 @@ export function FilterPanel({ initial, any, submit, close }: { initial: Conditio
   const patch = (index: number, update: Partial<Condition>) => setFilters(filters.map((row, i) => i === index ? { ...row, ...update } : row))
   return <div>
     <div className="dialog-section tool-fields">
-      <div className="field-line"><select className="text-input" aria-label="条件匹配方式" value={anyMatch ? 'or' : 'and'} onChange={event => setAny(event.target.value === 'or')}>
-        <option value="and">满足全部条件</option><option value="or">满足任一条件</option>
-      </select>
-      {presets.length > 0 && <select className="text-input" aria-label="载入筛选预设" value="" onChange={event => {
-        const selected = presets.find(item => item.name === event.target.value)
+      <div className="field-line"><SelectField aria-label="条件匹配方式" value={anyMatch ? 'or' : 'and'} onChange={mode => setAny(mode === 'or')}
+        options={selectOptions({ and: '满足全部条件', or: '满足任一条件' })} />
+      {presets.length > 0 && <SelectField aria-label="载入筛选预设" placeholder="载入预设" options={presets.map(item => item.name)} onChange={name => {
+        const selected = presets.find(item => item.name === name)
         if (selected) { setFilters(selected.filters); setAny(selected.any); setName(selected.name) }
-      }}><option value="" disabled>载入预设</option>{presets.map(item => <option key={item.name}>{item.name}</option>)}</select>}</div>
+      }} />}</div>
       {filters.map((item, index) => <div className="field-line" key={index}>
-        <select className="text-input" value={item.field} onChange={event => patch(index, { field: event.target.value })} aria-label="筛选字段">{Object.entries(filterFields).map(([key, title]) => <option key={key} value={key}>{title}</option>)}</select>
-        <select className="text-input" value={item.op} onChange={event => patch(index, { op: event.target.value })} aria-label="筛选操作">{Object.entries(filterOps).map(([key, title]) => <option key={key} value={key}>{title}</option>)}</select>
+        <SelectField aria-label="筛选字段" value={item.field} options={selectOptions(filterFields)} onChange={field => patch(index, { field })} />
+        <SelectField aria-label="筛选操作" value={item.op} options={selectOptions(filterOps)} onChange={op => patch(index, { op })} />
         <input className="text-input stretch mono" aria-label="筛选值" placeholder="输入筛选值" value={item.value} onChange={event => patch(index, { value: event.target.value })} />
         <button className="btn icon-button" aria-label="移除条件" onClick={() => setFilters(filters.filter((_, i) => i !== index))}><Trash2 size={13} /></button>
       </div>)}
@@ -252,22 +249,21 @@ export function DiffPanel({ base, rows, fetchDetail }: { base: Detail, rows: Row
     return () => { active = false }
   }, [target, fetchDetail])
   const diff = useMemo(() => other ? compareLines(comparisonText(base, view), comparisonText(other, view)) : [], [base, other, view])
-  return <div className="dialog-section tool-fields">
-    <div className="field-line"><strong className="mono">基准 #{base.id}</strong>
+  return <div className="dialog-section compare-panel">
+    <div className="field-line compare-controls"><strong className="mono">基准 #{base.id}</strong>
       <input className="text-input stretch" aria-label="搜索对比请求" placeholder="搜索请求编号、URL、方法或 Client"
         value={search} onChange={event => { setSearch(event.target.value); setPage(0) }} />
-      <select className="text-input" aria-label="对比内容" value={view} onChange={event => setView(event.target.value)}>
-        <option value="response">响应正文</option><option value="request">请求正文</option>
-        <option value="response-headers">响应标头</option><option value="request-headers">请求标头</option>
-        {(base.kind === 'WebSocket' || other?.kind === 'WebSocket' || view === 'frames') && <option value="frames">WebSocket 帧</option>}
-      </select>
+      <SelectField aria-label="对比内容" value={view} onChange={setView} options={selectOptions({
+        response: '响应正文', request: '请求正文', 'response-headers': '响应标头', 'request-headers': '请求标头',
+        ...((base.kind === 'WebSocket' || other?.kind === 'WebSocket' || view === 'frames') && { frames: 'WebSocket 帧' }),
+      })} />
     </div>
     <div className="request-picker" aria-label="对比候选请求">
       {candidates.slice(currentPage * pageSize, (currentPage + 1) * pageSize).map(item => <button className="request-picker-row mono"
         type="button" key={item.id} aria-pressed={item.id === target} onClick={() => {
           if (item.id !== target) { setTarget(item.id); setOther(null); setProblem('') }
         }}>
-        <span>#{item.id}</span><span>{item.method}</span><span title={item.url}>{item.host}{item.path}</span><span>{item.status || '—'}</span>
+        <span>#{item.id}</span><span>{item.method}</span><span>{item.host}{item.path.split('?', 1)[0]}</span><span>{item.status || '—'}</span>
       </button>)}
       {!candidates.length && <span className="request-picker-empty">没有匹配的已完成请求</span>}
     </div>
@@ -276,15 +272,18 @@ export function DiffPanel({ base, rows, fetchDetail }: { base: Detail, rows: Row
       <button className="btn subtle-button" disabled={currentPage === 0} onClick={() => setPage(currentPage - 1)}>上一页</button>
       <button className="btn subtle-button" disabled={(currentPage + 1) * pageSize >= candidates.length} onClick={() => setPage(currentPage + 1)}>下一页</button>
     </div>}
-    {problem && <p role="alert">{problem}</p>}
-    {target !== undefined && !other && !problem && <p role="status">正在读取 #{target}…</p>}
-    {other && <>
-      <div className="diff-summary mono"><span>#{base.id} · {base.status} · {base.duration} ms</span><span>#{other.id} · {other.status} · {other.duration} ms</span></div>
-      <div className="diff-code mono">{diff.map(({ left, right, changed }, index) => <div key={index}>
-        <span className={changed && left !== undefined ? 'diff-removed' : ''}>{left ?? ''}</span><span className={changed && right !== undefined ? 'diff-added' : ''}>{right ?? ''}</span>
-      </div>)}</div>
-      <p>每侧展示前 280 行，最多 30,000 字符。</p>
-    </>}
+    <div className="compare-result">
+      {problem && <p role="alert">{problem}</p>}
+      {target !== undefined && !other && !problem && <p role="status">正在读取 #{target}…</p>}
+      {target === undefined && <p className="compare-empty">选择一条请求查看差异</p>}
+      {other && <>
+        <div className="diff-summary mono"><span>#{base.id} · {base.status} · {base.duration} ms</span><span>#{other.id} · {other.status} · {other.duration} ms</span></div>
+        <div className="diff-code mono" tabIndex={0} aria-label="请求差异">{diff.map(({ left, right, changed }, index) => <div key={index}>
+          <span className={changed && left !== undefined ? 'diff-removed' : ''}>{left ?? ''}</span><span className={changed && right !== undefined ? 'diff-added' : ''}>{right ?? ''}</span>
+        </div>)}</div>
+        <p>每侧展示前 280 行，最多 30,000 字符。</p>
+      </>}
+    </div>
   </div>
 }
 
@@ -309,8 +308,7 @@ export function NetworkPanel({ initial, addresses, pending, submit, close }: {
   }
   return <>
     <div className="dialog-section tool-fields">
-      <label className="field-label" htmlFor="bind">监听地址</label><select className="text-input mono" id="bind" value={bind} onChange={event => setBind(event.target.value)}>
-        {[...new Set([...addresses, bind])].map(ip => <option key={ip}>{ip}</option>)}</select>
+      <label className="field-label" htmlFor="bind">监听地址</label><SelectField className="mono" id="bind" value={bind} options={[...new Set([...addresses, bind])]} onChange={setBind} />
       {bind !== '127.0.0.1' && <><label className="field-label" htmlFor="clients">允许连接的设备 IP 或子网</label>
         <textarea id="clients" className="tool-text text-input mono" placeholder="192.168.1.42" value={clients} onChange={event => setClients(event.target.value)} /></>}
       <label className="field-label" htmlFor="upstream">上游代理</label><input id="upstream" className="text-input mono" placeholder="http://127.0.0.1:8080" value={upstream} onChange={event => setUpstream(event.target.value)} />

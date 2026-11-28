@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Activity, ArrowDown, ArrowDownToLine, ArrowRight, ArrowUpFromLine, Cable, Check, ChevronRight, Circle, CircleHelp, Command, Copy, FilePlus2, GitCompareArrows, ListFilter, PenLine, Repeat2, Waypoints, Globe2, LockKeyhole, Moon, Network, PanelBottom, PanelRight, Columns2, Radio, Search, Settings2, ShieldCheck, Square, Sun, Trash2, X, Zap } from 'lucide-react'
+import { Activity, AppWindow, ArrowDown, ArrowDownToLine, ArrowRight, ArrowUpFromLine, Cable, Check, ChevronRight, Circle, CircleHelp, Command, Copy, FilePlus2, GitCompareArrows, ListFilter, PenLine, Repeat2, Waypoints, Globe2, LockKeyhole, Moon, Network, PanelBottom, PanelRight, Columns2, Radio, Search, Settings2, ShieldCheck, Square, Sun, Trash2, X, Zap } from 'lucide-react'
 import { api, native } from './api'
 import type { BreakpointAction, Condition, Detail, NetworkOptions, RequestInput, Row, Rule } from './api'
 import { ConnectionGuide } from './ConnectionGuide'
@@ -36,7 +36,10 @@ const formatTime = (date: string) => {
   return `${time.toLocaleTimeString('en-GB', { hour12: false })}.${String(time.getMilliseconds()).padStart(3, '0')}`
 }
 
-function Modal({ title, icon, onClose, children, notice, wide }: { title: string, icon: ReactNode, onClose: () => void, children: ReactNode, notice?: { message: string, error: boolean }, wide?: boolean }) {
+function Modal({ title, icon, onClose, children, notice, wide, comparison }: {
+  title: string, icon: ReactNode, onClose: () => void, children: ReactNode, notice?: { message: string, error: boolean },
+  wide?: boolean, comparison?: boolean,
+}) {
   const ref = useRef<HTMLDialogElement>(null)
   const heading = useRef<HTMLHeadingElement>(null)
   const titleId = useId()
@@ -50,13 +53,21 @@ function Modal({ title, icon, onClose, children, notice, wide }: { title: string
     return () => modal.close()
   }, [])
   return <dialog ref={ref} className="modal peek-modal" onCancel={event => { event.preventDefault(); onClose() }} aria-labelledby={titleId}>
-    <div className={`modal-box ${wide ? 'wide' : ''}`}>
+    <div className={`modal-box ${comparison ? 'compare-modal' : wide ? 'wide' : ''}`}>
       <div className="modal-title"><span>{icon}</span><h2 id={titleId} ref={heading} tabIndex={-1}>{title}</h2><button className="btn icon-button" onClick={onClose} aria-label="关闭"><X size={18} /></button></div>
       {children}
       {notice && <div className={`dialog-notice ${notice.error ? 'dialog-notice-error' : ''}`} role={notice.error ? 'alert' : 'status'}>{notice.message}</div>}
     </div>
     <form method="dialog" className="modal-backdrop" aria-hidden="true" onSubmit={event => { event.preventDefault(); onClose() }}><button tabIndex={-1}></button></form>
   </dialog>
+}
+
+function sourceGroup(row: Row, groupBy: 'apps' | 'domains') {
+  return groupBy === 'apps' ? clientLabel(row) : row.domain || row.host
+}
+
+function ClientIcon({ png }: { png: string }) {
+  return <img className="client-icon" src={`data:image/png;base64,${png}`} alt="" />
 }
 
 export function App() {
@@ -67,6 +78,7 @@ export function App() {
     return stored === 'automatic' || stored === 'manual' ? stored : null
   })
   const [rows, setRows] = useState<Row[]>([])
+  const [clientIcons, setClientIcons] = useState<Record<string, string>>({})
   const [connectedAddress, setConnectedAddress] = useState('')
   const [ruleCount, setRuleCount] = useState(0)
   const [network, setNetwork] = useState<NetworkOptions>({ bind: '127.0.0.1', clients: [], upstream: '', reverse: '', dns: {} })
@@ -127,6 +139,7 @@ export function App() {
     if (state.changed) {
       revision.current = state.revision
       setRows(state.rows ?? [])
+      setClientIcons(state.clientIcons ?? {})
     }
     setDesktopProblem('')
   }, [])
@@ -180,12 +193,13 @@ export function App() {
   }, [rows, conditions, anyMatch, showToast])
 
   const counts = useMemo(() => {
-    const hosts = new Map<string, number>()
+    const groups = new Map<string, { count: number, icon?: string }>()
     for (const row of rows) {
-      const group = groupBy === 'apps' ? clientLabel(row) : row.host
-      hosts.set(group, (hosts.get(group) ?? 0) + 1)
+      const group = sourceGroup(row, groupBy)
+      const previous = groups.get(group)
+      groups.set(group, { count: (previous?.count ?? 0) + 1, icon: previous?.icon || row.client?.icon })
     }
-    return [...hosts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    return [...groups.entries()].sort((a, b) => b[1].count - a[1].count || a[0].localeCompare(b[0]))
   }, [rows, groupBy])
   const visible = useMemo(() => {
     const terms = query.trim().toLowerCase().split(/\s+/).filter(Boolean)
@@ -197,7 +211,7 @@ export function App() {
       )
       const haystack = `${row.method} ${row.url} ${row.status} ${row.kind} ${row.contentType} ${clientLabel(row)} ${row.client?.address ?? ''}`.toLowerCase()
       const advancedMatch = !conditions.length || matches?.has(row.id)
-      return matchesFilter && advancedMatch && (!host || (groupBy === 'apps' ? clientLabel(row) : row.host) === host) && terms.every(term => haystack.includes(term))
+      return matchesFilter && advancedMatch && (!host || sourceGroup(row, groupBy) === host) && terms.every(term => haystack.includes(term))
     })
     result.sort((a, b) => {
       const left = sort.key === 'client' ? clientLabel(a) : a[sort.key]
@@ -354,9 +368,10 @@ export function App() {
           </div>
           <div className="source-list">
             {counts.length === 0 && <p className="no-hosts">等待新的连接</p>}
-            {counts.map(([name, count]) => <button key={name} title={name} aria-pressed={host === name}
+            {counts.map(([name, { count, icon }]) => <button key={name} title={name} aria-pressed={host === name}
               className={`source-button ${host === name ? 'chosen' : ''}`} onClick={() => setHost(host === name ? '' : name)}>
-              {name === 'localhost' || name === '127.0.0.1' ? <Cable size={13} /> : <Globe2 size={13} />}
+              {groupBy === 'apps' ? (icon && clientIcons[icon] ? <ClientIcon png={clientIcons[icon]} /> : <AppWindow size={13} />)
+                : name === 'localhost' || name === '127.0.0.1' ? <Cable size={13} /> : <Globe2 size={13} />}
               <span>{name}</span><em>{count}</em>
             </button>)}
           </div>
@@ -412,7 +427,9 @@ export function App() {
                     <strong className="mono">{row.path}</strong>
                   </button></td>
                   <td className="mono cell-host" title={row.host}>{row.host}</td>
-                  <td className="mono cell-client" title={[clientLabel(row), row.client?.address, row.client?.pid && `PID ${row.client.pid}`].filter(Boolean).join(' · ')}>{clientLabel(row)}</td>
+                  <td className="cell-client" title={[clientLabel(row), row.client?.address, row.client?.pid && `PID ${row.client.pid}`].filter(Boolean).join(' · ')}>
+                    <div className="client-cell">{row.client?.icon && clientIcons[row.client.icon] && <ClientIcon png={clientIcons[row.client.icon]} />}<span>{clientLabel(row)}</span></div>
+                  </td>
                   <td className="cell-status">{row.breakpoint ? <button className="break-chip" onClick={event => { event.stopPropagation(); setSelected(row.id); clickedBreakpoint(row) }}>已暂停</button> : <Status row={row} />}</td>
                   <td className="mono cell-contentType" title={row.contentType}>{row.kind === 'Tunnel' ? '隧道' : row.kind === 'WebSocket' ? 'WS' : fileType(row.contentType)}</td>
                   <td className="mono cell-started">{formatTime(row.started)}</td>
@@ -541,7 +558,7 @@ export function App() {
         setConditions(items); setAnyMatch(any); setDialog(null)
       })} />
     </Modal>}
-    {dialog === 'compare' && comparison && <Modal wide title="比较请求" icon={<GitCompareArrows size={20} />} notice={toast} onClose={() => setDialog(null)}>
+    {dialog === 'compare' && comparison && <Modal comparison title="比较请求" icon={<GitCompareArrows size={20} />} notice={toast} onClose={() => setDialog(null)}>
       <DiffPanel base={comparison} rows={rows} fetchDetail={api.detail} />
       <div className="modal-actions"><button className="btn subtle-button" onClick={() => setDialog(null)}>关闭</button></div>
     </Modal>}

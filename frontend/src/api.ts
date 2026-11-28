@@ -1,5 +1,5 @@
 export type Kind = 'HTTP' | 'HTTPS' | 'WebSocket' | 'Tunnel'
-export interface Client { address: string, name?: string, pid?: number }
+export interface Client { address: string, name?: string, pid?: number, icon?: string }
 export type Headers = Record<string, string[]> | null
 
 export interface Row {
@@ -9,6 +9,7 @@ export interface Row {
   method: string
   url: string
   host: string
+  domain?: string
   path: string
   kind: Kind
   status: number
@@ -49,6 +50,7 @@ export interface Snapshot {
   revision: number
   changed: boolean
   rows: Row[] | null
+  clientIcons?: Record<string, string>
   systemProxy: { active: boolean, pending: boolean }
 }
 

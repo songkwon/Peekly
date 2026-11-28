@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { header, readBytes } from './api'
 import type { Detail, Frame, Headers, Row } from './api'
+import { SelectField } from './SelectField'
 
 export function KeyValueList({ pairs, empty }: { pairs: [string, string][], empty: string }) {
   return pairs.length ? <dl className="key-value-list">{pairs.map(([key, value], index) =>
@@ -33,9 +34,8 @@ export function FramesPreview({ frames, count, copy }: { frames: Frame[], count:
   const labels: Record<number, string> = { 0: 'Continuation', 1: 'Text', 2: 'Binary', 8: 'Close', 9: 'Ping', 10: 'Pong' }
   return frames.length ? <div className="frames-preview">
     <div className="field-line frame-filters">
-      <select className="text-input" aria-label="WebSocket 帧方向" value={direction} onChange={event => setDirection(event.target.value)}>
-        <option value="">全部帧</option><option value="send">已发送</option><option value="receive">已接收</option>
-      </select>
+      <SelectField aria-label="WebSocket 帧方向" value={direction} onChange={setDirection}
+        options={[{ value: '', label: '全部帧' }, { value: 'send', label: '已发送' }, { value: 'receive', label: '已接收' }]} />
       <input className="text-input stretch" aria-label="搜索 WebSocket 帧" placeholder="搜索帧预览" value={query} onChange={event => setQuery(event.target.value)} />
     </div>
     {count > frames.length && <p>保留最近 {frames.length} 帧，共 {count} 帧。</p>}

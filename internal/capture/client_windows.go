@@ -12,11 +12,11 @@ import (
 
 var tcpOwners = windows.NewLazySystemDLL("iphlpapi.dll").NewProc("GetExtendedTcpTable")
 
-func localProcess(_ context.Context, peer, local *net.TCPAddr) (string, int) {
+func localProcess(_ context.Context, peer, local *net.TCPAddr) (string, int, string) {
 	const tableOwnerConnections = 4
 	size := uint32(0)
 	if err := tcpOwners.Find(); err != nil {
-		return "", 0
+		return "", 0, ""
 	}
 	_, _, _ = tcpOwners.Call(0, uintptr(unsafe.Pointer(&size)), 0, windows.AF_INET, tableOwnerConnections, 0)
 	for attempt := 0; attempt < 2 && size >= 4 && size <= 8<<20; attempt++ {
@@ -26,7 +26,7 @@ func localProcess(_ context.Context, peer, local *net.TCPAddr) (string, int) {
 			continue
 		}
 		if code != 0 {
-			return "", 0
+			return "", 0, ""
 		}
 		count := min(int(binary.LittleEndian.Uint32(data)), (len(data)-4)/24)
 		for index := 0; index < count; index++ {
@@ -38,17 +38,18 @@ func localProcess(_ context.Context, peer, local *net.TCPAddr) (string, int) {
 			pid := binary.LittleEndian.Uint32(row[20:24])
 			handle, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
 			if err != nil {
-				return "", int(pid)
+				return "", int(pid), ""
 			}
 			defer windows.CloseHandle(handle)
 			var image [1024]uint16
 			length := uint32(len(image))
 			if err := windows.QueryFullProcessImageName(handle, 0, &image[0], &length); err != nil {
-				return "", int(pid)
+				return "", int(pid), ""
 			}
-			return filepath.Base(windows.UTF16ToString(image[:length])), int(pid)
+			path := windows.UTF16ToString(image[:length])
+			return filepath.Base(path), int(pid), path
 		}
 		break
 	}
-	return "", 0
+	return "", 0, ""
 }

@@ -46,12 +46,13 @@ type listener struct {
 }
 
 type State struct {
-	Running  bool     `json:"running"`
-	Endpoint string   `json:"endpoint"`
-	Rules    []string `json:"rules"`
-	Revision uint64   `json:"revision"`
-	Changed  bool     `json:"changed"`
-	Rows     []Row    `json:"rows"`
+	Running     bool              `json:"running"`
+	Endpoint    string            `json:"endpoint"`
+	Rules       []string          `json:"rules"`
+	Revision    uint64            `json:"revision"`
+	Changed     bool              `json:"changed"`
+	Rows        []Row             `json:"rows"`
+	ClientIcons map[string]string `json:"clientIcons,omitempty"`
 }
 
 func New(dir string) *Engine {
@@ -184,6 +185,14 @@ func (e *Engine) Snapshot(since uint64) State {
 	}
 	e.mu.Unlock()
 	state.Revision, state.Rows, state.Changed = e.store.snapshot(since)
+	for _, row := range state.Rows {
+		if row.Client != nil && row.Client.Icon != "" {
+			if state.ClientIcons == nil {
+				state.ClientIcons = make(map[string]string)
+			}
+			state.ClientIcons[row.Client.Icon] = row.Client.png
+		}
+	}
 	return state
 }
 
