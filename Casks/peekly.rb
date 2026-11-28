@@ -1,9 +1,9 @@
 cask "peekly" do
   arch arm: "arm64", intel: "amd64"
 
-  version "0.3.0"
-  sha256 arm:   "3395169436d81b19c34debfcfd5b651bbc401865d46c3d7d95ee0820880468b4",
-         intel: "6c3c900a3a31531bd14d51c6a4318fe659be1dde3b6143cb94bf2c4846d6b095"
+  version "0.3.1"
+  sha256 arm:   "ba5a08259dc68dff3a78535031c5eab30ef12173ec19668cb8a27a6edb164aa7",
+         intel: "d7a034b08826a847fea9838b563267575316bdf30358ba51bf44f3704780ea45"
 
   url "https://github.com/songkwon/Peekly/releases/download/v#{version}/Peekly-macOS-#{arch}.zip"
   name "Peekly"
